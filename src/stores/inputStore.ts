@@ -7,6 +7,8 @@ interface InputStore extends InputGroupValues {
   setMonsterAC: (value: string) => void;
   setPartyLevel: (value: string) => void;
   setBaseDamage: (value: string) => void;
+  setToHitBonus: (value: string) => void;
+  setHasAdvantage: (value: boolean) => void;
   setValues: (values: InputGroupValues) => void;
   reset: () => void;
 }
@@ -15,6 +17,8 @@ const defaultValues: InputGroupValues = {
   monsterAC: '',
   partyLevel: '',
   baseDamage: '',
+  toHitBonus: '',
+  hasAdvantage: false,
 };
 
 export const useInputStore = create<InputStore>()(
@@ -24,7 +28,13 @@ export const useInputStore = create<InputStore>()(
       setMonsterAC: (value: string) => set({ monsterAC: value }),
       setPartyLevel: (value: string) => set({ partyLevel: value }),
       setBaseDamage: (value: string) => set({ baseDamage: value }),
-      setValues: (values: InputGroupValues) => set(values),
+      setToHitBonus: (value: string) => set({ toHitBonus: value }),
+      setHasAdvantage: (value: boolean) => set({ hasAdvantage: value }),
+      setValues: (values: InputGroupValues) => {
+        // Just set the values as-is, don't apply preset logic here
+        // The preset logic should only affect placeholders, not stored values
+        set(values);
+      },
       reset: () => set(defaultValues),
     }),
     {
@@ -34,6 +44,8 @@ export const useInputStore = create<InputStore>()(
         monsterAC: state.monsterAC,
         partyLevel: state.partyLevel,
         baseDamage: state.baseDamage,
+        toHitBonus: state.toHitBonus,
+        hasAdvantage: state.hasAdvantage,
       }),
     }
   )

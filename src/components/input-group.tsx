@@ -1,27 +1,22 @@
 import React, { useMemo } from 'react';
-import { FieldSet, FieldLegend, FieldGroup, FieldError } from '@/components/ui/field';
+import { FieldSet } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { getDefaultValues } from '@/lib/presets';
 
 // Define the type for our form state
 export interface InputGroupValues {
   monsterAC: string;
   partyLevel: string;
   baseDamage: string;
+  toHitBonus: string;
+  hasAdvantage: boolean;
 }
 
 interface InputGroupProps {
   values: InputGroupValues;
   onChange: (values: InputGroupValues) => void;
 }
-
-// Default presets as 3-tuples: [partyLevel, monsterAC, baseDamage]
-const DEFAULT_PRESETS: Array<[number, number, number]> = [
-  [1, 13, 8.5],
-  [5, 15, 10],
-  [10, 17, 12.5],
-  [15, 19, 15],
-  [20, 21, 20],
-];
 
 // Validators
 const validators = {
@@ -41,61 +36,40 @@ const validators = {
   },
   baseDamage: (value: string): { valid: boolean; error?: string } => {
     if (!value.trim()) return { valid: true }; // Empty is valid
-    if (!/^\d+(\.\d+)?$/.test(value)) return { valid: false, error: 'Damage must be a valid number' };
-    const num = parseFloat(value);
-    if (num < 0) return { valid: false, error: 'Damage must be 0 or greater' };
+    
+    // Check if it's a simple number
+    if (/^\d+(\.\d+)?$/.test(value)) {
+      const num = parseFloat(value);
+      if (num < 0) return { valid: false, error: 'Damage must be 0 or greater' };
+      return { valid: true };
+    }
+    
+    // Check if it's dice notation with arbitrary sequences (e.g., "3d6+5" or "1d10+3d8-5")
+    if (/^([+-])?(?:\d+d\d+|[\d.]+)(?:[+-](?:\d+d\d+|[\d.]+))*$/i.test(value)) {
+      return { valid: true };
+    }
+    
+    return { valid: false, error: 'Damage must be a number or dice notation (e.g., "3d6+5" or "1d10+3d8-5")' };
+  },
+  toHitBonus: (value: string): { valid: boolean; error?: string } => {
+    if (!value.trim()) return { valid: true }; // Empty is valid
+    if (!/^-?\d+$/.test(value)) return { valid: false, error: 'To-Hit Bonus must be a number' };
+    const num = parseInt(value, 10);
+    if (num < -2 || num > 50) return { valid: false, error: 'To-Hit Bonus must be between -2 and 50' };
     return { valid: true };
   },
 };
 
 // Helper to get placeholder values based on filled fields
-const getPlaceholderValues = (values: InputGroupValues): InputGroupValues => {
-  const filledCount = [values.partyLevel, values.monsterAC, values.baseDamage].filter(
-    (v) => v.trim()
-  ).length;
-
-  if (filledCount === 0) {
-    // No fields filled, use first preset
-    return {
-      partyLevel: '',
-      monsterAC: String(DEFAULT_PRESETS[0][1]),
-      baseDamage: String(DEFAULT_PRESETS[0][2]),
-    };
-  }
-
-  // At least one field is filled, try to match a preset
-  const partyLevelNum = values.partyLevel ? parseInt(values.partyLevel, 10) : undefined;
-  const monsterACNum = values.monsterAC ? parseInt(values.monsterAC, 10) : undefined;
-  const baseDamageNum = values.baseDamage ? parseFloat(values.baseDamage) : undefined;
-
-  // Find matching preset based on filled values
-  const matchingPreset = DEFAULT_PRESETS.find(([level, ac, damage]) => {
-    if (partyLevelNum !== undefined && level !== partyLevelNum) return false;
-    if (monsterACNum !== undefined && ac !== monsterACNum) return false;
-    if (baseDamageNum !== undefined && damage !== baseDamageNum) return false;
-    return true;
-  });
-
-  if (matchingPreset) {
-    return {
-      partyLevel: values.partyLevel || String(matchingPreset[0]),
-      monsterAC: values.monsterAC || String(matchingPreset[1]),
-      baseDamage: values.baseDamage || String(matchingPreset[2]),
-    };
-  }
-
-  // No matching preset, use defaults based on what's filled
-  return {
-    partyLevel: values.partyLevel || String(DEFAULT_PRESETS[0][0]),
-    monsterAC: values.monsterAC || String(DEFAULT_PRESETS[0][1]),
-    baseDamage: values.baseDamage || String(DEFAULT_PRESETS[0][2]),
-  };
+const getPlaceholderValues = (values: InputGroupValues): Omit<InputGroupValues, 'hasAdvantage'> => {
+  const defaults = getDefaultValues(values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus);
+  return { partyLevel: defaults.partyLevel, monsterAC: defaults.monsterAC, baseDamage: defaults.baseDamage, toHitBonus: defaults.toHitBonus };
 };
 
 export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
   const placeholders = useMemo(() => getPlaceholderValues(values), [values]);
 
-  const handleChange = (field: keyof InputGroupValues, newValue: string) => {
+  const handleChange = (field: keyof InputGroupValues, newValue: string | boolean) => {
     const updated = { ...values, [field]: newValue };
     onChange(updated);
   };
@@ -103,14 +77,16 @@ export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
   const partyLevelValidation = validators.partyLevel(values.partyLevel);
   const monsterACValidation = validators.monsterAC(values.monsterAC);
   const baseDamageValidation = validators.baseDamage(values.baseDamage);
+  const toHitBonusValidation = validators.toHitBonus(values.toHitBonus);
 
   return (
-    <FieldSet>
-      <FieldLegend>Attack Parameters</FieldLegend>
-      <FieldGroup>
+    <FieldSet className="border-0 gap-0 p-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Party Level */}
         <div className="space-y-2">
-          <Label htmlFor="party-level">Party Level</Label>
+          <Label htmlFor="party-level" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Party Level
+          </Label>
           <input
             id="party-level"
             type="text"
@@ -118,20 +94,22 @@ export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
             placeholder={`Default: ${placeholders.partyLevel}`}
             value={values.partyLevel}
             onChange={(e) => handleChange('partyLevel', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+            className={`w-full px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
               partyLevelValidation.valid
-                ? 'border-gray-300 focus:ring-blue-500'
-                : 'border-red-500 focus:ring-red-500'
+                ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
+                : 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500/20'
             }`}
           />
           {!partyLevelValidation.valid && partyLevelValidation.error && (
-            <FieldError>{partyLevelValidation.error}</FieldError>
+            <p className="text-sm text-red-600 dark:text-red-400">{partyLevelValidation.error}</p>
           )}
         </div>
 
         {/* Monster AC */}
         <div className="space-y-2">
-          <Label htmlFor="monster-ac">Monster AC</Label>
+          <Label htmlFor="monster-ac" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Monster AC
+          </Label>
           <input
             id="monster-ac"
             type="text"
@@ -139,20 +117,22 @@ export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
             placeholder={`Default: ${placeholders.monsterAC}`}
             value={values.monsterAC}
             onChange={(e) => handleChange('monsterAC', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+            className={`w-full px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
               monsterACValidation.valid
-                ? 'border-gray-300 focus:ring-blue-500'
-                : 'border-red-500 focus:ring-red-500'
+                ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
+                : 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500/20'
             }`}
           />
           {!monsterACValidation.valid && monsterACValidation.error && (
-            <FieldError>{monsterACValidation.error}</FieldError>
+            <p className="text-sm text-red-600 dark:text-red-400">{monsterACValidation.error}</p>
           )}
         </div>
 
         {/* Base Damage */}
         <div className="space-y-2">
-          <Label htmlFor="base-damage">Base Damage on Hit</Label>
+          <Label htmlFor="base-damage" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            Base Damage on Hit
+          </Label>
           <input
             id="base-damage"
             type="text"
@@ -160,17 +140,54 @@ export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
             placeholder={`Default: ${placeholders.baseDamage}`}
             value={values.baseDamage}
             onChange={(e) => handleChange('baseDamage', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${
+            className={`w-full px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
               baseDamageValidation.valid
-                ? 'border-gray-300 focus:ring-blue-500'
-                : 'border-red-500 focus:ring-red-500'
+                ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
+                : 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500/20'
             }`}
           />
           {!baseDamageValidation.valid && baseDamageValidation.error && (
-            <FieldError>{baseDamageValidation.error}</FieldError>
+            <p className="text-sm text-red-600 dark:text-red-400">{baseDamageValidation.error}</p>
           )}
         </div>
-      </FieldGroup>
+
+        {/* To-Hit Bonus */}
+        <div className="space-y-2">
+          <Label htmlFor="to-hit-bonus" className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            To-Hit Bonus
+          </Label>
+          <input
+            id="to-hit-bonus"
+            type="text"
+            inputMode="numeric"
+            placeholder={`Default: ${placeholders.toHitBonus}`}
+            value={values.toHitBonus}
+            onChange={(e) => handleChange('toHitBonus', e.target.value)}
+            className={`w-full px-4 py-3 border-2 rounded-lg font-medium transition-colors ${
+              toHitBonusValidation.valid
+                ? 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20'
+                : 'border-red-500 dark:border-red-400 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-red-500/20'
+            }`}
+          />
+          {!toHitBonusValidation.valid && toHitBonusValidation.error && (
+            <p className="text-sm text-red-600 dark:text-red-400">{toHitBonusValidation.error}</p>
+          )}
+        </div>
+
+        {/* Has Advantage Switch */}
+        <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-end">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="has-advantage"
+              checked={values.hasAdvantage}
+              onCheckedChange={(checked) => handleChange('hasAdvantage', checked)}
+            />
+            <Label htmlFor="has-advantage" className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer mb-0">
+              Has Advantage
+            </Label>
+          </div>
+        </div>
+      </div>
     </FieldSet>
   );
 };

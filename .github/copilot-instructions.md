@@ -32,3 +32,5 @@ For example you can elect to roll 3d4 and subtract the total from your attack ro
 - Use React.FC type for components with children
 - Keep components small and focused
 
+# Testing
+Always use vitest for unit tests.
