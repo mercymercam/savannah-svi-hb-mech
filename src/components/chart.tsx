@@ -11,7 +11,7 @@ interface ChartProps {
 export const Chart: React.FC<ChartProps> = ({ values }) => {
   const [showBarChart, setShowBarChart] = useState(false);
   const chartRef = React.useRef<HTMLDivElement>(null);
-  const { boxPlotData, categories, boxPlotColors, enableBoxPlot } = useDamageData(values);
+  const { boxPlotData, categories, boxPlotColors, enableBoxPlot, consideringCrits } = useDamageData(values);
 
   React.useEffect(() => {
     if (!chartRef.current) return;
@@ -30,7 +30,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
 
       const option: echarts.EChartsOption = {
         title: {
-          text: 'Expected Damage Distribution by d4 Penalty (Median Values)',
+          text: `Expected Damage Distribution by d4 Penalty (Median Values)${consideringCrits ? ' - Including Critical Hits' : ''}`,
           left: 'center',
           textStyle: {
             color: '#1f2937',
@@ -113,7 +113,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
     } else {
       const option: echarts.EChartsOption = {
         title: {
-          text: 'Expected Damage Distribution by d4 Penalty',
+          text: `Expected Damage Distribution by d4 Penalty${consideringCrits ? ' - Including Critical Hits' : ''}`,
           left: 'center',
           textStyle: {
             color: '#1f2937', // dark gray
@@ -211,7 +211,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
       window.removeEventListener('resize', handleResize);
       chart.dispose();
     };
-  }, [boxPlotData, categories, boxPlotColors, showBarChart]);
+  }, [boxPlotData, categories, boxPlotColors, showBarChart, consideringCrits]);
 
   return (
     <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
