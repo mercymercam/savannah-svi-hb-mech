@@ -37,8 +37,8 @@ const validators = {
   baseDamage: (value: string): { valid: boolean; error?: string } => {
     if (!value.trim()) return { valid: true }; // Empty is valid
     
-    // Check if it's a simple number
-    if (/^\d+(\.\d+)?$/.test(value)) {
+    // Check if it's a simple number (with optional sign: +3.5, -3.5, .5, +.5, etc.)
+    if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(value)) {
       const num = parseFloat(value);
       if (num < 0) return { valid: false, error: 'Damage must be 0 or greater' };
       return { valid: true };
@@ -46,6 +46,19 @@ const validators = {
     
     // Check if it's dice notation with arbitrary sequences (e.g., "3d6+5" or "1d10+3d8-5")
     if (/^([+-])?(?:\d+d\d+|[\d.]+)(?:[+-](?:\d+d\d+|[\d.]+))*$/i.test(value)) {
+      // Extract all dice expressions and validate die size is <= 20
+      const diceMatches = value.match(/\d*d(\d+)/gi);
+      if (diceMatches) {
+        for (const diceExpr of diceMatches) {
+          const dieSizeMatch = diceExpr.match(/d(\d+)/i);
+          if (dieSizeMatch) {
+            const dieSize = parseInt(dieSizeMatch[1], 10);
+            if (dieSize > 20) {
+              return { valid: false, error: 'Dice size must be d20 or smaller' };
+            }
+          }
+        }
+      }
       return { valid: true };
     }
     
