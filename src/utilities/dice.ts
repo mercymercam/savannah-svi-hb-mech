@@ -160,3 +160,14 @@ export const parseDamageString = (damageString: string): number | null => {
   
   return total;
 };
+
+/**
+ * Check if a damage string contains dice notation (e.g., "1d10+5" vs "8.5").
+ * Returns true if the string contains any dice expression (XdY format).
+ * 
+ * @param damageString - The damage string to check
+ * @returns true if the string contains dice notation, false otherwise
+ */
+export const isDiceExpression = (damageString: string): boolean => {
+  return damageString.toLowerCase().includes('d');
+};

@@ -1,5 +1,5 @@
 import nd4Data from '@/assets/nd4.json';
-import { rollDice, extractDiceTokens } from './dice';
+import { rollDice, extractDiceTokens, isDiceExpression } from './dice';
 import { RangeDist, d } from './prob-eval';
 
 export const getD4Distribution = (numD4s: number): number[] => {
@@ -89,6 +89,11 @@ export const calculateDamageStats = (
 ): number[] => {
   console.log('Calculating Damage Stats with baseDamage:', baseDamage);
 
+  // Determine if we should consider crits based on whether baseDamage contains dice
+  const considerCrits = typeof baseDamage === 'string' && isDiceExpression(baseDamage);
+  
+  console.log('Considering crits:', considerCrits);
+
   // Parse baseDamage
   if (typeof baseDamage === 'string') {
     // Use the full distribution method for dice notation
@@ -99,6 +104,7 @@ export const calculateDamageStats = (
       toHitBonus,
       baseDamage,
       hasAdvantage,
+      considerCrits,
     ) as number[];
   } else {
     // For numeric base damage, convert to dice notation (treating as constant damage)
@@ -111,6 +117,7 @@ export const calculateDamageStats = (
       toHitBonus,
       baseDamageStr,
       hasAdvantage,
+      false, // Never consider crits for numeric damage
     ) as number[];
   }
 };
@@ -270,6 +277,7 @@ export const calculateDirectlyDamageStats = (
   toHitBonus: number,
   baseDamage: string,
   hasAdvantage: boolean = false,
+  considerCrits: boolean = false,
 ): number[] => {
   // Parse base damage string to extract all dice components
   const baseDamageTokens = extractDiceTokens(baseDamage);
@@ -290,11 +298,37 @@ export const calculateDirectlyDamageStats = (
         baseDamageDist = baseDamageDist.add(diceDist.negate());
       }
     } else if (token.type === 'number' && token.value !== undefined) {
-      // Add/subtract constant
+      // Add/subtract constant (round to integer for RangeDist)
+      const intValue = Math.round(token.value);
       if (token.op === '+') {
-        baseDamageDist = baseDamageDist.add(token.value);
+        baseDamageDist = baseDamageDist.add(intValue);
       } else {
-        baseDamageDist = baseDamageDist.add(-token.value);
+        baseDamageDist = baseDamageDist.add(-intValue);
+      }
+    }
+  }
+  
+  // Build crit damage distribution if considering crits
+  // On a crit, all dice are doubled (rolled twice), but flat modifiers are not
+  let critDamageDist = RangeDist.literal(0);
+  if (considerCrits) {
+    for (const token of baseDamageTokens) {
+      if (token.type === 'dice' && token.numDice && token.diceSize) {
+        // On a crit, roll the dice twice
+        const diceDist = d(token.diceSize).repeatSum(token.numDice * 2);
+        if (token.op === '+') {
+          critDamageDist = critDamageDist.add(diceDist);
+        } else {
+          critDamageDist = critDamageDist.add(diceDist.negate());
+        }
+      } else if (token.type === 'number' && token.value !== undefined) {
+        // Flat modifiers are not doubled on crits (round to integer for RangeDist)
+        const intValue = Math.round(token.value);
+        if (token.op === '+') {
+          critDamageDist = critDamageDist.add(intValue);
+        } else {
+          critDamageDist = critDamageDist.add(-intValue);
+        }
       }
     }
   }
@@ -319,37 +353,70 @@ export const calculateDirectlyDamageStats = (
   // Calculate damage distribution with d4s, then compute delta
   // For each combination of (d20 roll, d4 roll, base damage roll):
   //   - If d20 == 1: miss (0 damage)
-  //   - If d20 == 20: hit (base damage + 2*d4)
+  //   - If d20 == 20: crit hit (crit damage + 2*d4 if considerCrits, else base damage + 2*d4)
   //   - Otherwise: if d20 + attackBonus - d4 >= AC: hit (base damage + 2*d4), else miss (0 damage)
   //   - Delta = damage_with_d4s - damage_baseline
   const damageDeltaDist = d20Dist.map((d20Roll: number) => {
     return d4Dist.map((d4Value: number) => {
-      return baseDamageDist.map((baseDmg: number) => {
-        // Calculate damage without d4s for this scenario
-        let damageWithoutD4s: number;
-        if (d20Roll === 1) {
-          damageWithoutD4s = 0; // Auto-miss
-        } else if (d20Roll === 20) {
-          damageWithoutD4s = baseDmg; // Auto-hit
-        } else {
-          const rollWithoutD4s = d20Roll + attackBonus;
-          damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
-        }
-        
-        // Calculate damage with d4s for this scenario
-        let damageWithD4s: number;
-        if (d20Roll === 1) {
-          damageWithD4s = 0; // Auto-miss
-        } else if (d20Roll === 20) {
-          damageWithD4s = baseDmg + (d4Value * 2); // Auto-hit with bonus
-        } else {
-          const rollWithD4s = d20Roll + attackBonus - d4Value;
-          damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
-        }
-        
-        // Return the delta
-        return damageWithD4s - damageWithoutD4s;
-      });
+      if (considerCrits) {
+        // When considering crits, we need to handle critical hits differently
+        return baseDamageDist.map((baseDmg: number) => {
+          return critDamageDist.map((critDmg: number) => {
+            // Calculate damage without d4s for this scenario
+            let damageWithoutD4s: number;
+            if (d20Roll === 1) {
+              damageWithoutD4s = 0; // Auto-miss
+            } else if (d20Roll === 20) {
+              damageWithoutD4s = critDmg; // Crit hit with crit damage
+            } else {
+              const rollWithoutD4s = d20Roll + attackBonus;
+              damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+            }
+            
+            // Calculate damage with d4s for this scenario
+            let damageWithD4s: number;
+            if (d20Roll === 1) {
+              damageWithD4s = 0; // Auto-miss
+            } else if (d20Roll === 20) {
+              damageWithD4s = critDmg + (d4Value * 2); // Crit hit with crit damage and bonus
+            } else {
+              const rollWithD4s = d20Roll + attackBonus - d4Value;
+              damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
+            }
+            
+            // Return the delta
+            return damageWithD4s - damageWithoutD4s;
+          });
+        });
+      } else {
+        // When not considering crits, treat everything as non-crit
+        return baseDamageDist.map((baseDmg: number) => {
+          // Calculate damage without d4s for this scenario
+          let damageWithoutD4s: number;
+          if (d20Roll === 1) {
+            damageWithoutD4s = 0; // Auto-miss
+          } else if (d20Roll === 20) {
+            damageWithoutD4s = baseDmg; // Auto-hit
+          } else {
+            const rollWithoutD4s = d20Roll + attackBonus;
+            damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+          }
+          
+          // Calculate damage with d4s for this scenario
+          let damageWithD4s: number;
+          if (d20Roll === 1) {
+            damageWithD4s = 0; // Auto-miss
+          } else if (d20Roll === 20) {
+            damageWithD4s = baseDmg + (d4Value * 2); // Auto-hit with bonus
+          } else {
+            const rollWithD4s = d20Roll + attackBonus - d4Value;
+            damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
+          }
+          
+          // Return the delta
+          return damageWithD4s - damageWithoutD4s;
+        });
+      }
     });
   });
   

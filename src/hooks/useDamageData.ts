@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { InputGroupValues } from '@/components/input-group';
 import { calculateDamageStats } from '@/utilities/utilities';
-import { parseDamageString } from '@/utilities/dice';
+import { parseDamageString, isDiceExpression } from '@/utilities/dice';
 import { getDefaultValues } from '@/lib/presets';
 
 export interface DamageDataRow {
@@ -24,6 +24,8 @@ export interface UseDamageDataResult {
   boxPlotColors: string[];
   /** Whether box plot view is enabled (true if baseDamage is a simple number) */
   enableBoxPlot: boolean;
+  /** Whether critical hits are being considered in the calculation */
+  consideringCrits: boolean;
 }
 
 /**
@@ -47,6 +49,9 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
     
     // For baseDamage, use the actual value if provided, otherwise use the preset default
     const baseDamageString = values.baseDamage || defaults.baseDamage;
+    
+    // Check if we're considering crits (dice expressions only)
+    const consideringCrits = isDiceExpression(baseDamageString);
     
     // Check if baseDamage is a simple number
     const enableBoxPlot = true; //isSimpleNumber(baseDamageString);
@@ -98,12 +103,47 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
 
       // Add to chart data
       boxPlotData.push(stats);
-      // Determine color based on median (index 2)
-      boxPlotColors.push(stats[2] >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)');
+      
+      // Determine color based on sophisticated logic:
+      // - If median > 0: green
+      // - If median < 0: red
+      // - If median = 0: check q1 and q3
+      //   - If one is 0, the non-zero one decides by its sign
+      //   - If both are non-zero, the one with larger absolute value decides
+      const median = stats[2];
+      const q1 = stats[1];
+      const q3 = stats[3];
+      
+      let color: string;
+      if (median > 0) {
+        color = 'rgb(34, 197, 94)'; // green
+      } else if (median < 0) {
+        color = 'rgb(239, 68, 68)'; // red
+      } else {
+        // median === 0
+        if (q1 === 0 && q3 === 0) {
+          color = 'rgb(34, 197, 94)'; // green (all zeros)
+        } else if (q1 === 0) {
+          color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+        } else if (q3 === 0) {
+          color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+        } else {
+          // Both q1 and q3 are non-zero, compare absolute values
+          const absQ1 = Math.abs(q1);
+          const absQ3 = Math.abs(q3);
+          if (absQ1 > absQ3) {
+            color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+          } else {
+            color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+          }
+        }
+      }
+      
+      boxPlotColors.push(color);
       categories.push(`${numD4s}d4`);
     }
 
-    return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot };
+    return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot, consideringCrits };
   }, [values]);
 
   return result;

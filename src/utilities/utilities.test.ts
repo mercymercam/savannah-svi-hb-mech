@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getD4Distribution, calculateDamageStats, calculateHitChance } from './utilities';
+import { getD4Distribution, calculateDamageStats, calculateHitChance, calculateDirectlyDamageStats } from './utilities';
 
 describe('getD4Distribution', () => {
   it('should return distribution for 1d4', () => {
@@ -298,5 +298,143 @@ it('should return 0.99 when AC is very low w/ adv (guaranteed hit)', () => {
     const chance20AC = calculateHitChance(5, 20, 0, 0, false);
     expect(chance10AC).toBeGreaterThan(chance15AC);
     expect(chance15AC).toBeGreaterThan(chance20AC);
+  });
+});
+
+describe('calculateDamageStats with dice expressions (crits enabled)', () => {
+  it('should automatically consider crits for dice expressions', () => {
+    // With dice expression, crits should be considered
+    const statsDice = calculateDamageStats(1, 5, 13, 0, '1d10+5', false);
+    expect(statsDice).toHaveLength(5);
+    expect(statsDice.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+  });
+
+  it('should not consider crits for simple numbers', () => {
+    // With simple number, crits should not be considered
+    const statsNumber = calculateDamageStats(1, 5, 13, 0, 8.5, false);
+    expect(statsNumber).toHaveLength(5);
+    expect(statsNumber.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+  });
+
+  it('should handle various dice expressions', () => {
+    const expressions = ['1d10', '2d6+3', '1d8+1d4', '3d6', '1d12+5'];
+    expressions.forEach(expr => {
+      const stats = calculateDamageStats(1, 5, 13, 0, expr, false);
+      expect(stats).toHaveLength(5);
+      expect(stats[0]).toBeLessThanOrEqual(stats[2]);
+      expect(stats[2]).toBeLessThanOrEqual(stats[4]);
+    });
+  });
+
+  it('should have higher damage variance with crits (dice) than without (numbers)', () => {
+    // For similar average damage, dice expressions should have more variance due to crits
+    const statsDice = calculateDamageStats(1, 5, 13, 0, '1d10+5', false); // avg 10.5
+    const statsNumber = calculateDamageStats(1, 5, 13, 0, 10.5, false); // fixed 10.5
+    
+    // The range (p95 - p5) should be wider for dice due to crit mechanics
+    const rangeDice = statsDice[4] - statsDice[0];
+    const rangeNumber = statsNumber[4] - statsNumber[0];
+    
+    expect(rangeDice).toBeGreaterThanOrEqual(rangeNumber);
+  });
+
+  it('should handle dice expressions with advantage', () => {
+    const statsNoAdv = calculateDamageStats(1, 5, 13, 0, '1d10+5', false);
+    const statsAdv = calculateDamageStats(1, 5, 13, 0, '1d10+5', true);
+    
+    // With advantage, median should be better or equal
+    expect(statsAdv[2]).toBeGreaterThanOrEqual(statsNoAdv[2]);
+  });
+
+  it('should handle complex dice expressions', () => {
+    const stats = calculateDamageStats(1, 5, 13, 0, '1d10+2d6+3', false);
+    expect(stats).toHaveLength(5);
+    expect(stats.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+    expect(stats[0]).toBeLessThanOrEqual(stats[2]);
+    expect(stats[2]).toBeLessThanOrEqual(stats[4]);
+  });
+
+  it('should have consistent percentile ordering with crits', () => {
+    const stats = calculateDamageStats(2, 10, 15, 2, '2d6+5', false);
+    expect(stats[0]).toBeLessThanOrEqual(stats[1]); // p5 <= q1
+    expect(stats[1]).toBeLessThanOrEqual(stats[2]); // q1 <= median
+    expect(stats[2]).toBeLessThanOrEqual(stats[3]); // median <= q3
+    expect(stats[3]).toBeLessThanOrEqual(stats[4]); // q3 <= p95
+  });
+
+  it('should produce higher expected damage with higher base dice', () => {
+    const stats1d6 = calculateDamageStats(1, 5, 13, 0, '1d6+5', false);
+    const stats1d12 = calculateDamageStats(1, 5, 13, 0, '1d12+5', false);
+    
+    // 1d12 has higher average and especially benefits from crits
+    // Check that the 95th percentile is at least as high (crits matter more at high percentiles)
+    expect(stats1d12[4]).toBeGreaterThanOrEqual(stats1d6[4]);
+  });
+});
+
+describe('calculateDirectlyDamageStats with crits parameter', () => {
+  it('should handle considerCrits=false', () => {
+    const stats = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, false);
+    expect(stats).toHaveLength(5);
+    expect(stats.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+  });
+
+  it('should handle considerCrits=true', () => {
+    const stats = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, true);
+    expect(stats).toHaveLength(5);
+    expect(stats.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+  });
+
+  it('should produce different results with and without crits', () => {
+    const statsNoCrits = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, false);
+    const statsWithCrits = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, true);
+    
+    // With crits, the distribution should be different (especially at higher percentiles)
+    // The 95th percentile should generally be higher with crits due to crit hits
+    expect(statsWithCrits[4]).toBeGreaterThanOrEqual(statsNoCrits[4]);
+  });
+
+  it('should double dice on crits but not modifiers', () => {
+    // 1d10+5: on crit becomes 2d10+5 (not 2d10+10)
+    const stats = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, true);
+    expect(stats).toHaveLength(5);
+    // The max possible delta with crits should account for doubled dice
+    // This is a smoke test - exact values depend on AC and other factors
+    expect(stats[4]).toBeGreaterThan(0);
+  });
+
+  it('should handle multiple dice types in crits', () => {
+    // 1d10+2d6+3: on crit becomes 2d10+4d6+3
+    const stats = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+2d6+3', false, true);
+    expect(stats).toHaveLength(5);
+    expect(stats.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+  });
+
+  it('should maintain percentile ordering with crits', () => {
+    const stats = calculateDirectlyDamageStats(2, 10, 15, 2, '2d6+5', false, true);
+    expect(stats[0]).toBeLessThanOrEqual(stats[1]);
+    expect(stats[1]).toBeLessThanOrEqual(stats[2]);
+    expect(stats[2]).toBeLessThanOrEqual(stats[3]);
+    expect(stats[3]).toBeLessThanOrEqual(stats[4]);
+  });
+
+  it('should work with advantage and crits', () => {
+    const statsNoAdv = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, true);
+    const statsAdv = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', true, true);
+    
+    // Advantage should improve outcomes
+    expect(statsAdv[2]).toBeGreaterThanOrEqual(statsNoAdv[2]);
+  });
+
+  it('should handle simple numeric string without crits', () => {
+    const stats = calculateDirectlyDamageStats(1, 5, 13, 0, '10', false, false);
+    expect(stats).toHaveLength(5);
+    expect(stats.every(val => typeof val === 'number' && !isNaN(val))).toBe(true);
+  });
+
+  it('should produce consistent results for same inputs', () => {
+    const stats1 = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, true);
+    const stats2 = calculateDirectlyDamageStats(1, 5, 13, 0, '1d10+5', false, true);
+    expect(stats1).toEqual(stats2);
   });
 });

@@ -166,7 +166,7 @@ describe('Percentile Calculation', () => {
     const partyLevel = 5;
     const monsterAC = 13;
     const toHitBonus = 0;
-    const baseDamage = 8.5; // Numeric value
+    const baseDamage = 9; // Use integer for RangeDist.literal
     const hasAdvantage = false;
     
     const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
