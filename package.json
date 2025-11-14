@@ -24,8 +24,7 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.17",
-    "zustand": "^5.0.8",
-    "zustand-cookie-storage": "^1.1.1"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

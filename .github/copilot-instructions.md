@@ -34,3 +34,6 @@ For example you can elect to roll 3d4 and subtract the total from your attack ro
 
 # Testing
 Always use vitest for unit tests.
+
+# Tips
+DO NOT USE REQUIRE. ONLY IMPORT.

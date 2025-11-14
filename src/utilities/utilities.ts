@@ -1,5 +1,6 @@
 import nd4Data from '@/assets/nd4.json';
 import { rollDice, extractDiceTokens } from './dice';
+import { RangeDist, d } from './prob-eval';
 
 export const getD4Distribution = (numD4s: number): number[] => {
   // Cast to proper type for accessing data
@@ -86,38 +87,32 @@ export const calculateDamageStats = (
   baseDamage: number | string,
   hasAdvantage: boolean = false,
 ): number[] => {
-  const d4Distribution = getD4Distribution(numD4s);
-
   console.log('Calculating Damage Stats with baseDamage:', baseDamage);
 
-  // Parse baseDamage if it's a string
-  let baseDamageValue: number;
+  // Parse baseDamage
   if (typeof baseDamage === 'string') {
-    return simulateDamageStats(
+    // Use the full distribution method for dice notation
+    return calculateDirectlyDamageStats(
       numD4s,
       partyLevel,
       monsterAC,
       toHitBonus,
       baseDamage,
       hasAdvantage,
-      10000
     ) as number[];
   } else {
-    baseDamageValue = baseDamage;
+    // For numeric base damage, convert to dice notation (treating as constant damage)
+    // This ensures we use the proper probability distribution calculation
+    const baseDamageStr = `${Math.round(baseDamage)}`;
+    return calculateDirectlyDamageStats(
+      numD4s,
+      partyLevel,
+      monsterAC,
+      toHitBonus,
+      baseDamageStr,
+      hasAdvantage,
+    ) as number[];
   }
-
-  const baseHitChance = calculateHitChance(partyLevel, monsterAC, 0, toHitBonus, hasAdvantage);
-  const baseExpectedDmg =  baseDamageValue * baseHitChance;
-
-  // Calculate damage delta for each percentile: (d4 value * 2) weighted by hit chance
-  return d4Distribution.map((d4Value) => {
-    const damageBonus = d4Value * 2;
-    const hitChance = calculateHitChance(partyLevel, monsterAC, d4Value, toHitBonus, hasAdvantage);
-    const bonusDamageWithHitChance = (baseExpectedDmg + damageBonus) * hitChance;
-    // Return the delta gain compared to not using d4s
-    const delta = bonusDamageWithHitChance - baseExpectedDmg;
-    return Math.round(delta * 1000000) / 1000000;
-  });
 };
 
 /*
@@ -139,21 +134,34 @@ export const simulateDamageStats = (
     return null;
   }
   
-  // Calculate baseline hit chance
-  const baseHitChance = calculateHitChance(partyLevel, monsterAC, 0, toHitBonus, hasAdvantage);
+  // Calculate proficiency bonus
+  const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
+  const maxD4s = Math.min(numD4s, proficiencyBonus);
   
-  // Frequency map to store damage outcomes
-  const frequencyMap = new Map<number, number>();
+  // Calculate attack bonus
+  const attackBonus = proficiencyBonus + toHitBonus;
+  
+  // Array to store all delta values from simulation
+  const deltas: number[] = [];
   
   // Run simulation
   for (let i = 0; i < iterations; i++) {
-    // Roll all base damage dice
+    // Roll a d20 (with advantage if needed)
+    let d20Roll: number;
+    if (hasAdvantage) {
+      const roll1 = Math.floor(Math.random() * 20) + 1;
+      const roll2 = Math.floor(Math.random() * 20) + 1;
+      d20Roll = Math.max(roll1, roll2);
+    } else {
+      d20Roll = Math.floor(Math.random() * 20) + 1;
+    }
+    
+    // Roll base damage dice
     let baseDamageRoll = 0;
     for (const token of baseDamageTokens) {
       if (token.type === 'dice' && token.numDice && token.diceSize) {
         baseDamageRoll += rollDice(token.numDice, token.diceSize, token.op);
       } else if (token.type === 'number' && token.value !== undefined) {
-        // simple number
         if (token.op === '+') {
           baseDamageRoll += token.value;
         } else {
@@ -164,51 +172,198 @@ export const simulateDamageStats = (
     
     // Roll d4s for this iteration
     let d4Roll = 0;
-    for (let j = 0; j < Math.min(numD4s, Math.ceil(partyLevel / 4) + 1); j++) {
+    for (let j = 0; j < maxD4s; j++) {
       d4Roll += Math.floor(Math.random() * 4) + 1;
     }
     
-    // Calculate hit chance with this d4 roll
-    const hitChance = calculateHitChance(partyLevel, monsterAC, d4Roll, toHitBonus, hasAdvantage);
+    // Calculate damage without d4s for this scenario
+    let damageWithoutD4s: number;
+    if (d20Roll === 1) {
+      damageWithoutD4s = 0; // Auto-miss
+    } else if (d20Roll === 20) {
+      damageWithoutD4s = baseDamageRoll; // Auto-hit
+    } else {
+      const rollWithoutD4s = d20Roll + attackBonus;
+      damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDamageRoll : 0;
+    }
     
-    // Calculate expected damage delta for this roll
-    const damageBonus = d4Roll * 2;
-    const baseExpectedDmg = baseDamageRoll * baseHitChance;
-    const bonusDamageWithHitChance = (baseDamageRoll + damageBonus) * hitChance;
-    const delta = bonusDamageWithHitChance - baseExpectedDmg;
+    // Calculate damage with d4s for this scenario
+    let damageWithD4s: number;
+    if (d20Roll === 1) {
+      damageWithD4s = 0; // Auto-miss
+    } else if (d20Roll === 20) {
+      damageWithD4s = baseDamageRoll + (d4Roll * 2); // Auto-hit with bonus
+    } else {
+      const rollWithD4s = d20Roll + attackBonus - d4Roll;
+      damageWithD4s = rollWithD4s >= monsterAC ? (baseDamageRoll + (d4Roll * 2)) : 0;
+    }
     
-    // Round to 6 decimal places for consistency
-    const roundedDelta = Math.round(delta * 1000000) / 1000000;
-    
-    // Record in frequency map
-    frequencyMap.set(roundedDelta, (frequencyMap.get(roundedDelta) || 0) + 1);
+    // Calculate the delta
+    const delta = damageWithD4s - damageWithoutD4s;
+    deltas.push(delta);
   }
   
-  // Convert frequency map to sorted array of values
-  const sortedValues = Array.from(frequencyMap.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([value]) => value);
+  // Sort deltas to calculate percentiles
+  deltas.sort((a, b) => a - b);
   
   // Calculate percentiles
-  const p5Index = Math.floor(sortedValues.length * 0.05);
-  const q1Index = Math.floor(sortedValues.length * 0.25);
-  const medianIndex = Math.floor(sortedValues.length * 0.5);
-  const q3Index = Math.floor(sortedValues.length * 0.75);
-  const p95Index = Math.floor(sortedValues.length * 0.95);
+  const p5Index = Math.floor(iterations * 0.05);
+  const q1Index = Math.floor(iterations * 0.25);
+  const medianIndex = Math.floor(iterations * 0.50);
+  const q3Index = Math.floor(iterations * 0.75);
+  const p95Index = Math.floor(iterations * 0.95);
   
   console.log('Simulated Damage Stats:', {
-    p5: sortedValues[p5Index],
-    q1: sortedValues[q1Index],
-    median: sortedValues[medianIndex],
-    q3: sortedValues[q3Index],
-    p95: sortedValues[p95Index],
+    p5: deltas[p5Index],
+    q1: deltas[q1Index],
+    median: deltas[medianIndex],
+    q3: deltas[q3Index],
+    p95: deltas[p95Index],
   });
 
   return [
-    sortedValues[p5Index],
-    sortedValues[q1Index],
-    sortedValues[medianIndex],
-    sortedValues[q3Index],
-    sortedValues[p95Index],
+    deltas[p5Index],
+    deltas[q1Index],
+    deltas[medianIndex],
+    deltas[q3Index],
+    deltas[p95Index],
   ];
+};
+
+/**
+ * Helper function to calculate percentiles from a RangeDist
+ */
+const calculatePercentilesFromDist = (dist: RangeDist): number[] => {
+  // Build cumulative distribution
+  const cdf: number[] = [];
+  let cumulative = 0;
+  
+  for (let i = 0; i < dist.p.length; i++) {
+    cumulative += dist.p[i];
+    cdf.push(cumulative);
+  }
+  
+  // Find values at specific percentiles
+  const findPercentile = (percentile: number): number => {
+    const target = percentile / 100;
+    for (let i = 0; i < cdf.length; i++) {
+      if (cdf[i] >= target) {
+        return dist.min + i;
+      }
+    }
+    return dist.max;
+  };
+  
+  return [
+    findPercentile(5),   // 5th percentile
+    findPercentile(25),  // Q1
+    findPercentile(50),  // Median
+    findPercentile(75),  // Q3
+    findPercentile(95),  // 95th percentile
+  ];
+};
+
+export const calculateDirectlyDamageStats = (
+  numD4s: number,
+  partyLevel: number,
+  monsterAC: number,
+  toHitBonus: number,
+  baseDamage: string,
+  hasAdvantage: boolean = false,
+): number[] => {
+  // Parse base damage string to extract all dice components
+  const baseDamageTokens = extractDiceTokens(baseDamage);
+  
+  if (!baseDamageTokens) {
+    return [0, 0, 0, 0, 0];
+  }
+  
+  // Build the base damage distribution using RangeDist
+  let baseDamageDist = RangeDist.literal(0);
+  for (const token of baseDamageTokens) {
+    if (token.type === 'dice' && token.numDice && token.diceSize) {
+      // Create distribution for this dice roll
+      const diceDist = d(token.diceSize).repeatSum(token.numDice);
+      if (token.op === '+') {
+        baseDamageDist = baseDamageDist.add(diceDist);
+      } else {
+        baseDamageDist = baseDamageDist.add(diceDist.negate());
+      }
+    } else if (token.type === 'number' && token.value !== undefined) {
+      // Add/subtract constant
+      if (token.op === '+') {
+        baseDamageDist = baseDamageDist.add(token.value);
+      } else {
+        baseDamageDist = baseDamageDist.add(-token.value);
+      }
+    }
+  }
+  
+  // Calculate proficiency bonus and max d4s we can use
+  const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
+  const maxD4s = Math.min(numD4s, proficiencyBonus);
+  
+  // Create d20 distribution (with advantage if needed)
+  let d20Dist = d(20);
+  if (hasAdvantage) {
+    // Advantage: take the max of two d20 rolls
+    d20Dist = RangeDist.largest(d(20), d(20));
+  }
+  
+  // Calculate attack bonus
+  const attackBonus = proficiencyBonus + toHitBonus;
+  
+  // Create d4 distribution
+  const d4Dist = d(4).repeatSum(maxD4s);
+  
+  // Calculate damage distribution with d4s, then compute delta
+  // For each combination of (d20 roll, d4 roll, base damage roll):
+  //   - If d20 == 1: miss (0 damage)
+  //   - If d20 == 20: hit (base damage + 2*d4)
+  //   - Otherwise: if d20 + attackBonus - d4 >= AC: hit (base damage + 2*d4), else miss (0 damage)
+  //   - Delta = damage_with_d4s - damage_baseline
+  const damageDeltaDist = d20Dist.map((d20Roll: number) => {
+    return d4Dist.map((d4Value: number) => {
+      return baseDamageDist.map((baseDmg: number) => {
+        // Calculate damage without d4s for this scenario
+        let damageWithoutD4s: number;
+        if (d20Roll === 1) {
+          damageWithoutD4s = 0; // Auto-miss
+        } else if (d20Roll === 20) {
+          damageWithoutD4s = baseDmg; // Auto-hit
+        } else {
+          const rollWithoutD4s = d20Roll + attackBonus;
+          damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+        }
+        
+        // Calculate damage with d4s for this scenario
+        let damageWithD4s: number;
+        if (d20Roll === 1) {
+          damageWithD4s = 0; // Auto-miss
+        } else if (d20Roll === 20) {
+          damageWithD4s = baseDmg + (d4Value * 2); // Auto-hit with bonus
+        } else {
+          const rollWithD4s = d20Roll + attackBonus - d4Value;
+          damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
+        }
+        
+        // Return the delta
+        return damageWithD4s - damageWithoutD4s;
+      });
+    });
+  });
+  
+  // Calculate percentiles from the damage delta distribution
+  const percentiles = calculatePercentilesFromDist(damageDeltaDist);
+  
+  console.log('Damage Delta Distribution:', {
+    min: damageDeltaDist.min,
+    max: damageDeltaDist.max,
+    pLength: damageDeltaDist.p.length,
+    firstFewProbs: Array.from(damageDeltaDist.p.slice(0, 10)),
+    lastFewProbs: Array.from(damageDeltaDist.p.slice(-10)),
+  });
+  console.log('Percentiles:', percentiles);
+  
+  return percentiles;
 };

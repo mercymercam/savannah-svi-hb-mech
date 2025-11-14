@@ -53,9 +53,6 @@ importers:
       zustand:
         specifier: ^5.0.8
         version: 5.0.8(@types/react@18.3.26)(react@18.3.1)
-      zustand-cookie-storage:
-        specifier: ^1.1.1
-        version: 1.1.1
     devDependencies:
       '@eslint/js':
         specifier: ^9.9.0
@@ -2810,9 +2807,6 @@ packages:
   zrender@6.0.0:
     resolution: {integrity: sha512-41dFXEEXuJpNecuUQq6JlbybmnHaqqpGlbH1yxnA5V9MMP4SbohSVZsJIwz+zdjQXSSlR1Vc34EgH1zxyTDvhg==}
 
-  zustand-cookie-storage@1.1.1:
-    resolution: {integrity: sha512-0hPqVu4V2GTA8bZYyUemz/XBFfstzLvRye7nzStm9enCF6mEriy6+7JPe9tVFC0sjeV15wsxXtwG2XaneAf6CQ==}
-
   zustand@5.0.8:
     resolution: {integrity: sha512-gyPKpIaxY9XcO2vSMrLbiER7QMAMGOQZVRdJ6Zi782jkbzZygq5GI9nG8g+sMgitRtndwaBSl7uiqC49o1SSiw==}
     engines: {node: '>=12.20.0'}
@@ -5347,8 +5341,6 @@ snapshots:
   zrender@6.0.0:
     dependencies:
       tslib: 2.3.0
-
-  zustand-cookie-storage@1.1.1: {}
 
   zustand@5.0.8(@types/react@18.3.26)(react@18.3.1):
     optionalDependencies:

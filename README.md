@@ -1,11 +1,9 @@
 TODO: Make simulation work
 TODO: Adding better logging
-TODO: Boxplot support
 TODO: Separate worker to run simulation code
 TODO: Loading state
 TODO: Crits??
 TODO: Validate it works lmao
-TODO: Make cookie state loading works, it seems to save okay but isn't reading them right. Also add expiry.
 
 # React + TypeScript + Vite
 

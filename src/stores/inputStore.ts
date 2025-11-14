@@ -1,6 +1,5 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { cookieStorage } from 'zustand-cookie-storage';
+import { persist } from 'zustand/middleware';
 import { InputGroupValues } from '@/components/input-group';
 
 interface InputStore extends InputGroupValues {
@@ -38,8 +37,9 @@ export const useInputStore = create<InputStore>()(
       reset: () => set(defaultValues),
     }),
     {
-      name: 'input-store',
-      storage: createJSONStorage(() => cookieStorage),
+      name: 'dnd-hb-mech-input-store',
+      // Use localStorage for client-side persistence (Vite/React app)
+      // No need to specify storage - localStorage is the default
       partialize: (state) => ({
         monsterAC: state.monsterAC,
         partyLevel: state.partyLevel,

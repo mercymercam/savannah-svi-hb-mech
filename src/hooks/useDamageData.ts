@@ -2,21 +2,7 @@ import { useMemo, useRef } from 'react';
 import { InputGroupValues } from '@/components/input-group';
 import { calculateDamageStats } from '@/utilities/utilities';
 import { parseDamageString } from '@/utilities/dice';
-
-
-/**
- * Check if a damage string is a simple number (not dice notation).
- * 
- * @param damageString - The damage string to check
- * @returns True if the string is a simple number, false otherwise
- */
-const isSimpleNumber = (damageString: string): boolean => {
-  const trimmed = damageString.trim();
-  if (!trimmed) return true; // Empty string is considered simple
-  
-  const simpleNumber = parseFloat(trimmed);
-  return !isNaN(simpleNumber) && simpleNumber.toString() === trimmed;
-};
+import { getDefaultValues } from '@/lib/presets';
 
 export interface DamageDataRow {
   d4Count: number;
@@ -51,16 +37,23 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
   const previousValidDamageRef = useRef<number>(8.5);
   
   const result = useMemo(() => {
-    const partyLevel = parseInt(values.partyLevel, 10) || 1;
-    const monsterAC = parseInt(values.monsterAC, 10) || 13;
-    const toHitBonus = parseInt(values.toHitBonus, 10) || 0;
+    // Get the default values based on the preset logic
+    const defaults = getDefaultValues(values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus);
+    
+    // Use the actual value if provided, otherwise use the preset default
+    const partyLevel = values.partyLevel ? parseInt(values.partyLevel, 10) : parseInt(defaults.partyLevel, 10);
+    const monsterAC = values.monsterAC ? parseInt(values.monsterAC, 10) : parseInt(defaults.monsterAC, 10);
+    const toHitBonus = values.toHitBonus ? parseInt(values.toHitBonus, 10) : parseInt(defaults.toHitBonus, 10);
+    
+    // For baseDamage, use the actual value if provided, otherwise use the preset default
+    const baseDamageString = values.baseDamage || defaults.baseDamage;
     
     // Check if baseDamage is a simple number
-    const enableBoxPlot = isSimpleNumber(values.baseDamage) || values === undefined || values.baseDamage.trim() === '';
+    const enableBoxPlot = true; //isSimpleNumber(baseDamageString);
     
     // Parse base damage (handles both simple numbers and dice notation)
-    const parsedDamage = parseDamageString(values.baseDamage);
-    const baseDamage = parsedDamage !== null ? parsedDamage : previousValidDamageRef.current;
+    const parsedDamage = parseDamageString(baseDamageString);
+    const baseDamage = parsedDamage !== null ? baseDamageString : previousValidDamageRef.current;
     
     // Update the previous valid damage if we have a valid parse
     if (parsedDamage !== null) {
@@ -85,6 +78,13 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
         baseDamage,
         values.hasAdvantage
       );
+      const isValidStats = Array.isArray(stats)
+        && stats.length === 5
+        && stats.every((v, i, arr) => typeof v === 'number' && Number.isFinite(v) && (i === 0 || v >= arr[i - 1]));
+
+      if (!isValidStats) {
+        console.error(`calculateDamageStats returned invalid stats for ${numD4s}d4 — expected 5 numeric values in non-decreasing order, got: ${JSON.stringify(stats)}`);
+      }
 
       // Add to table data
       rows.push({
