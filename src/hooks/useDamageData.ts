@@ -26,6 +26,8 @@ export interface UseDamageDataResult {
   enableBoxPlot: boolean;
   /** Whether critical hits are being considered in the calculation */
   consideringCrits: boolean;
+  /** The current view mode: 'relative' (delta) or 'absolute' (total damage) */
+  viewMode: 'relative' | 'absolute';
 }
 
 /**
@@ -81,7 +83,8 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
         monsterAC,
         toHitBonus,
         baseDamage,
-        values.hasAdvantage
+        values.hasAdvantage,
+        values.viewMode
       );
       const isValidStats = Array.isArray(stats)
         && stats.length === 5
@@ -104,37 +107,44 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
       // Add to chart data
       boxPlotData.push(stats);
       
-      // Determine color based on sophisticated logic:
-      // - If median > 0: green
-      // - If median < 0: red
-      // - If median = 0: check q1 and q3
-      //   - If one is 0, the non-zero one decides by its sign
-      //   - If both are non-zero, the one with larger absolute value decides
+      // Determine color based on view mode:
+      // In relative mode (delta):
+      //   - If median > 0: green (gain)
+      //   - If median < 0: red (loss)
+      //   - If median = 0: check q1 and q3 for decision
+      // In absolute mode:
+      //   - Use blue for all (just showing damage, not gain/loss)
       const median = stats[2];
       const q1 = stats[1];
       const q3 = stats[3];
       
       let color: string;
-      if (median > 0) {
-        color = 'rgb(34, 197, 94)'; // green
-      } else if (median < 0) {
-        color = 'rgb(239, 68, 68)'; // red
+      if (values.viewMode === 'absolute') {
+        // In absolute mode, use a consistent blue color
+        color = 'rgb(59, 130, 246)'; // blue
       } else {
-        // median === 0
-        if (q1 === 0 && q3 === 0) {
-          color = 'rgb(34, 197, 94)'; // green (all zeros)
-        } else if (q1 === 0) {
-          color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
-        } else if (q3 === 0) {
-          color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+        // In relative mode, use green/red based on gain/loss
+        if (median > 0) {
+          color = 'rgb(34, 197, 94)'; // green
+        } else if (median < 0) {
+          color = 'rgb(239, 68, 68)'; // red
         } else {
-          // Both q1 and q3 are non-zero, compare absolute values
-          const absQ1 = Math.abs(q1);
-          const absQ3 = Math.abs(q3);
-          if (absQ1 > absQ3) {
+          // median === 0
+          if (q1 === 0 && q3 === 0) {
+            color = 'rgb(34, 197, 94)'; // green (all zeros)
+          } else if (q1 === 0) {
+            color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+          } else if (q3 === 0) {
             color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
           } else {
-            color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+            // Both q1 and q3 are non-zero, compare absolute values
+            const absQ1 = Math.abs(q1);
+            const absQ3 = Math.abs(q3);
+            if (absQ1 > absQ3) {
+              color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+            } else {
+              color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+            }
           }
         }
       }
@@ -143,7 +153,7 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
       categories.push(`${numD4s}d4`);
     }
 
-    return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot, consideringCrits };
+    return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot, consideringCrits, viewMode: values.viewMode };
   }, [values]);
 
   return result;

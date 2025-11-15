@@ -5,9 +5,9 @@ import { useInputStore } from './stores/inputStore'
 import './App.css'
 
 function App() {
-  const { monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, setValues } = useInputStore()
+  const { monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, viewMode, setValues } = useInputStore()
   
-  const inputValues = { monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage }
+  const inputValues = { monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, viewMode }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">

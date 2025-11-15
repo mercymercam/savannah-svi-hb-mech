@@ -11,6 +11,7 @@ export interface InputGroupValues {
   baseDamage: string;
   toHitBonus: string;
   hasAdvantage: boolean;
+  viewMode: 'relative' | 'absolute';
 }
 
 interface InputGroupProps {
@@ -74,7 +75,7 @@ const validators = {
 };
 
 // Helper to get placeholder values based on filled fields
-const getPlaceholderValues = (values: InputGroupValues): Omit<InputGroupValues, 'hasAdvantage'> => {
+const getPlaceholderValues = (values: InputGroupValues): Omit<InputGroupValues, 'hasAdvantage' | 'viewMode'> => {
   const defaults = getDefaultValues(values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus);
   return { partyLevel: defaults.partyLevel, monsterAC: defaults.monsterAC, baseDamage: defaults.baseDamage, toHitBonus: defaults.toHitBonus };
 };
@@ -188,7 +189,7 @@ export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
         </div>
 
         {/* Has Advantage Switch */}
-        <div className="col-span-1 sm:col-span-2 lg:col-span-4 flex items-end">
+        <div className="col-span-1 sm:col-span-2 lg:col-span-2 flex items-end">
           <div className="flex items-center space-x-2">
             <Switch
               id="has-advantage"
@@ -198,6 +199,23 @@ export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
             <Label htmlFor="has-advantage" className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer mb-0">
               Has Advantage
             </Label>
+          </div>
+        </div>
+
+        {/* View Mode Switch */}
+        <div className="col-span-1 sm:col-span-2 lg:col-span-2 flex items-end">
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="view-mode"
+              checked={values.viewMode === 'absolute'}
+              onCheckedChange={(checked) => handleChange('viewMode', checked ? 'absolute' : 'relative')}
+            />
+            <Label htmlFor="view-mode" className="text-sm font-medium text-gray-900 dark:text-gray-100 cursor-pointer mb-0">
+              Absolute Damage View
+            </Label>
+            <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+              ({values.viewMode === 'absolute' ? 'showing total damage' : 'showing damage gain vs no d4s'})
+            </span>
           </div>
         </div>
       </div>

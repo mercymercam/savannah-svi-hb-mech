@@ -11,7 +11,7 @@ interface ChartProps {
 export const Chart: React.FC<ChartProps> = ({ values }) => {
   const [showBarChart, setShowBarChart] = useState(false);
   const chartRef = React.useRef<HTMLDivElement>(null);
-  const { boxPlotData, categories, boxPlotColors, enableBoxPlot, consideringCrits } = useDamageData(values);
+  const { boxPlotData, categories, boxPlotColors, enableBoxPlot, consideringCrits, viewMode } = useDamageData(values);
 
   React.useEffect(() => {
     if (!chartRef.current) return;
@@ -25,12 +25,20 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
         return medianValue;
       });
 
-      // Create bar chart colors based on value
-      const barColors = medianData.map((value) => (value < 0 ? '#ef4444' : '#3b82f6'));
+      // Create bar chart colors based on view mode
+      const barColors = medianData.map((value) => {
+        if (viewMode === 'absolute') {
+          // In absolute mode, use blue for all bars
+          return '#3b82f6';
+        } else {
+          // In relative mode, use red for negative, blue for positive
+          return value < 0 ? '#ef4444' : '#3b82f6';
+        }
+      });
 
       const option: echarts.EChartsOption = {
         title: {
-          text: `Expected Damage Distribution by d4 Penalty (Median Values)${consideringCrits ? ' - Including Critical Hits' : ''}`,
+          text: `${viewMode === 'absolute' ? 'Total Expected Damage' : 'Expected Damage Gain'} by d4 Penalty (Median Values)${consideringCrits ? ' - Including Critical Hits' : ''}`,
           left: 'center',
           textStyle: {
             color: '#1f2937',
@@ -76,7 +84,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
         },
         yAxis: {
           type: 'value',
-          name: 'Expected Damage',
+          name: viewMode === 'absolute' ? 'Total Expected Damage' : 'Expected Damage Gain',
           nameTextStyle: {
             color: '#374151',
           },
@@ -113,7 +121,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
     } else {
       const option: echarts.EChartsOption = {
         title: {
-          text: `Expected Damage Distribution by d4 Penalty${consideringCrits ? ' - Including Critical Hits' : ''}`,
+          text: `${viewMode === 'absolute' ? 'Total Expected Damage' : 'Expected Damage'} Distribution by d4 Penalty${consideringCrits ? ' - Including Critical Hits' : ''}`,
           left: 'center',
           textStyle: {
             color: '#1f2937', // dark gray
@@ -163,7 +171,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
         },
         yAxis: {
           type: 'value',
-          name: 'Expected Damage',
+          name: viewMode === 'absolute' ? 'Total Expected Damage' : 'Expected Damage Gain',
           nameTextStyle: {
             color: '#374151',
           },
@@ -211,7 +219,7 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
       window.removeEventListener('resize', handleResize);
       chart.dispose();
     };
-  }, [boxPlotData, categories, boxPlotColors, showBarChart, consideringCrits]);
+  }, [boxPlotData, categories, boxPlotColors, showBarChart, consideringCrits, viewMode]);
 
   return (
     <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
@@ -237,7 +245,14 @@ export const Chart: React.FC<ChartProps> = ({ values }) => {
       />
       <div className="mt-6 text-sm text-gray-600 dark:text-gray-400">
         <p>
-          <strong>Interpretation:</strong> {showBarChart ? 'The bar chart displays the median expected damage for each d4 penalty option, with blue bars representing positive expected damage and red bars representing negative expected damage.' : 'Each boxplot shows the distribution of damage. The box represents the interquartile range (Q1 to Q3), the line inside the box is the median, and the whiskers extend to the 5th and 95th percentiles.'}
+          <strong>Interpretation:</strong> {showBarChart 
+            ? (viewMode === 'absolute' 
+                ? 'The bar chart displays the median total expected damage for each d4 penalty option. Blue bars show the expected damage when using that number of d4s.' 
+                : 'The bar chart displays the median expected damage gain for each d4 penalty option, with blue bars representing positive expected damage gain and red bars representing negative expected damage gain compared to not using d4s.')
+            : (viewMode === 'absolute'
+                ? 'Each boxplot shows the distribution of total expected damage when using that number of d4s. The box represents the interquartile range (Q1 to Q3), the line inside the box is the median, and the whiskers extend to the 5th and 95th percentiles.'
+                : 'Each boxplot shows the distribution of damage gain compared to not using d4s. The box represents the interquartile range (Q1 to Q3), the line inside the box is the median, and the whiskers extend to the 5th and 95th percentiles.')
+          }
         </p>
       </div>
     </div>

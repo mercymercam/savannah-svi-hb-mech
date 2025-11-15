@@ -58,13 +58,17 @@ export const calculateHitChance = (
 
 // Calculate expected damage delta gained by using numD4s instead of not using any
 /**
- * Calculate expected damage deltas for a set of d4 outcomes relative to not using those d4s.
+ * Calculate expected damage statistics for a set of d4 outcomes.
+ *
+ * Can operate in two modes:
+ * - 'relative' (default): Returns damage deltas (difference between using d4s vs not using them)
+ * - 'absolute': Returns total expected damage when using the d4s
  *
  * Uses getD4Distribution(numD4s) to iterate each d4 outcome, computes the hit chance via
- * calculateHitChance(partyLevel, monsterAC, d4Value, toHitBonus, hasAdvantage), and compares
- * the expected bonus damage from the d4s to the baseline expected damage without them.
+ * calculateHitChance(partyLevel, monsterAC, d4Value, toHitBonus, hasAdvantage), and calculates
+ * the expected damage based on the view mode.
  *
- * Each returned value represents the expected change in damage (average damage per attack)
+ * Each returned value represents the expected damage (average damage per attack)
  * for the corresponding entry in the d4 distribution.
  *
  * @param numD4s - Number of d4 dice being considered; used to derive the d4 outcome distribution.
@@ -73,11 +77,11 @@ export const calculateHitChance = (
  * @param toHitBonus - Flat to-hit modifier added to the attack roll.
  * @param baseDamage - Base damage dealt on a successful hit (without the additional d4s).
  * @param hasAdvantage - Whether the attack roll has advantage (default: false).
+ * @param viewMode - 'relative' for damage deltas, 'absolute' for total damage (default: 'relative').
  *
  * @returns number[] - An array of numbers (one per entry in the d4 distribution). Each element is
- * the expected damage delta (bonus expected damage from the d4s, weighted by hit chance, minus
- * the baseline expected damage without those d4s). Values are in units of average damage per attack
- * and may be negative if the addition reduces expected damage relative to the baseline.
+ * either the expected damage delta (if viewMode is 'relative') or the total expected damage 
+ * (if viewMode is 'absolute'). Values are in units of average damage per attack.
  */
 export const calculateDamageStats = (
   numD4s: number,
@@ -86,6 +90,7 @@ export const calculateDamageStats = (
   toHitBonus: number,
   baseDamage: number | string,
   hasAdvantage: boolean = false,
+  viewMode: 'relative' | 'absolute' = 'relative',
 ): number[] => {
   console.log('Calculating Damage Stats with baseDamage:', baseDamage);
 
@@ -105,6 +110,7 @@ export const calculateDamageStats = (
       baseDamage,
       hasAdvantage,
       considerCrits,
+      viewMode,
     ) as number[];
   } else {
     // For numeric base damage, convert to dice notation (treating as constant damage)
@@ -118,6 +124,7 @@ export const calculateDamageStats = (
       baseDamageStr,
       hasAdvantage,
       false, // Never consider crits for numeric damage
+      viewMode,
     ) as number[];
   }
 };
@@ -278,6 +285,7 @@ export const calculateDirectlyDamageStats = (
   baseDamage: string,
   hasAdvantage: boolean = false,
   considerCrits: boolean = false,
+  viewMode: 'relative' | 'absolute' = 'relative',
 ): number[] => {
   // Parse base damage string to extract all dice components
   const baseDamageTokens = extractDiceTokens(baseDamage);
@@ -350,27 +358,30 @@ export const calculateDirectlyDamageStats = (
   // Create d4 distribution
   const d4Dist = d(4).repeatSum(maxD4s);
   
-  // Calculate damage distribution with d4s, then compute delta
+  // Calculate damage distribution with d4s, then compute delta or absolute based on viewMode
   // For each combination of (d20 roll, d4 roll, base damage roll):
   //   - If d20 == 1: miss (0 damage)
   //   - If d20 == 20: crit hit (crit damage + 2*d4 if considerCrits, else base damage + 2*d4)
   //   - Otherwise: if d20 + attackBonus - d4 >= AC: hit (base damage + 2*d4), else miss (0 damage)
-  //   - Delta = damage_with_d4s - damage_baseline
+  //   - In relative mode: Delta = damage_with_d4s - damage_baseline
+  //   - In absolute mode: Return damage_with_d4s
   const damageDeltaDist = d20Dist.map((d20Roll: number) => {
     return d4Dist.map((d4Value: number) => {
       if (considerCrits) {
         // When considering crits, we need to handle critical hits differently
         return baseDamageDist.map((baseDmg: number) => {
           return critDamageDist.map((critDmg: number) => {
-            // Calculate damage without d4s for this scenario
-            let damageWithoutD4s: number;
-            if (d20Roll === 1) {
-              damageWithoutD4s = 0; // Auto-miss
-            } else if (d20Roll === 20) {
-              damageWithoutD4s = critDmg; // Crit hit with crit damage
-            } else {
-              const rollWithoutD4s = d20Roll + attackBonus;
-              damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+            // Calculate damage without d4s for this scenario (only needed in relative mode)
+            let damageWithoutD4s = 0;
+            if (viewMode === 'relative') {
+              if (d20Roll === 1) {
+                damageWithoutD4s = 0; // Auto-miss
+              } else if (d20Roll === 20) {
+                damageWithoutD4s = critDmg; // Crit hit with crit damage
+              } else {
+                const rollWithoutD4s = d20Roll + attackBonus;
+                damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+              }
             }
             
             // Calculate damage with d4s for this scenario
@@ -384,22 +395,24 @@ export const calculateDirectlyDamageStats = (
               damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
             }
             
-            // Return the delta
-            return damageWithD4s - damageWithoutD4s;
+            // Return the delta or absolute value based on viewMode
+            return viewMode === 'absolute' ? damageWithD4s : (damageWithD4s - damageWithoutD4s);
           });
         });
       } else {
         // When not considering crits, treat everything as non-crit
         return baseDamageDist.map((baseDmg: number) => {
-          // Calculate damage without d4s for this scenario
-          let damageWithoutD4s: number;
-          if (d20Roll === 1) {
-            damageWithoutD4s = 0; // Auto-miss
-          } else if (d20Roll === 20) {
-            damageWithoutD4s = baseDmg; // Auto-hit
-          } else {
-            const rollWithoutD4s = d20Roll + attackBonus;
-            damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+          // Calculate damage without d4s for this scenario (only needed in relative mode)
+          let damageWithoutD4s = 0;
+          if (viewMode === 'relative') {
+            if (d20Roll === 1) {
+              damageWithoutD4s = 0; // Auto-miss
+            } else if (d20Roll === 20) {
+              damageWithoutD4s = baseDmg; // Auto-hit
+            } else {
+              const rollWithoutD4s = d20Roll + attackBonus;
+              damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
+            }
           }
           
           // Calculate damage with d4s for this scenario
@@ -413,8 +426,8 @@ export const calculateDirectlyDamageStats = (
             damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
           }
           
-          // Return the delta
-          return damageWithD4s - damageWithoutD4s;
+          // Return the delta or absolute value based on viewMode
+          return viewMode === 'absolute' ? damageWithD4s : (damageWithD4s - damageWithoutD4s);
         });
       }
     });
@@ -423,7 +436,7 @@ export const calculateDirectlyDamageStats = (
   // Calculate percentiles from the damage delta distribution
   const percentiles = calculatePercentilesFromDist(damageDeltaDist);
   
-  console.log('Damage Delta Distribution:', {
+  console.log(`Damage Distribution (${viewMode} mode):`, {
     min: damageDeltaDist.min,
     max: damageDeltaDist.max,
     pLength: damageDeltaDist.p.length,

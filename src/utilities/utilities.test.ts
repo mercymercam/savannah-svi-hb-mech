@@ -438,3 +438,46 @@ describe('calculateDirectlyDamageStats with crits parameter', () => {
     expect(stats1).toEqual(stats2);
   });
 });
+
+describe('calculateDamageStats with viewMode parameter', () => {
+  it('should return relative damage (delta) when viewMode is relative', () => {
+    const stats = calculateDamageStats(1, 5, 13, 0, '1d10+5', false, 'relative');
+    expect(stats).toHaveLength(5);
+    // In relative mode, values can be negative (when d4 penalty reduces overall damage)
+    expect(stats.some(val => val < 0)).toBe(true);
+  });
+
+  it('should return absolute damage when viewMode is absolute', () => {
+    const stats = calculateDamageStats(1, 5, 13, 0, '1d10+5', false, 'absolute');
+    expect(stats).toHaveLength(5);
+    // In absolute mode, all values should be non-negative (damage can't be less than 0)
+    expect(stats.every(val => val >= 0)).toBe(true);
+    // The median absolute damage should be higher than 0 for a decent hit chance
+    expect(stats[2]).toBeGreaterThanOrEqual(0);
+  });
+
+  it('should have absolute values higher than relative for good scenarios', () => {
+    // High to-hit bonus and low AC - d4 penalty should help
+    const relativeStats = calculateDamageStats(1, 10, 10, 5, '2d6+5', false, 'relative');
+    const absoluteStats = calculateDamageStats(1, 10, 10, 5, '2d6+5', false, 'absolute');
+    
+    expect(absoluteStats[2]).toBeGreaterThan(relativeStats[2]); // absolute median > relative median
+  });
+
+  it('should default to relative mode when viewMode not specified', () => {
+    const statsExplicitRelative = calculateDamageStats(1, 5, 13, 0, 10, false, 'relative');
+    const statsDefault = calculateDamageStats(1, 5, 13, 0, 10, false);
+    
+    expect(statsDefault).toEqual(statsExplicitRelative);
+  });
+
+  it('should work with both numeric and dice notation in absolute mode', () => {
+    const statsNumeric = calculateDamageStats(1, 5, 13, 0, 10, false, 'absolute');
+    const statsDice = calculateDamageStats(1, 5, 13, 0, '2d6+3', false, 'absolute');
+    
+    expect(statsNumeric).toHaveLength(5);
+    expect(statsDice).toHaveLength(5);
+    expect(statsNumeric.every(val => val >= 0)).toBe(true);
+    expect(statsDice.every(val => val >= 0)).toBe(true);
+  });
+});

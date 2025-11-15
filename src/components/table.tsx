@@ -132,7 +132,7 @@ export const DamageTable: React.FC<DataTableProps> = ({ values }) => {
   ]);
 
   // Get table data from hook
-  const { rows: tableData } = useDamageData(values);
+  const { rows: tableData, viewMode } = useDamageData(values);
 
   const table = useReactTable({
     data: tableData,
@@ -207,15 +207,14 @@ export const DamageTable: React.FC<DataTableProps> = ({ values }) => {
       {/* Table legend/description */}
       <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
         <p className="font-medium text-gray-700 dark:text-gray-300">
-          Expected Damage Gain by d4 Penalty
+          {viewMode === 'absolute' ? 'Total Expected Damage by d4 Penalty' : 'Expected Damage Gain by d4 Penalty'}
         </p>
         <ul className="space-y-1 list-disc list-inside">
           <li>
             <strong>d4 Penalty:</strong> Number of d4s subtracted from attack roll
           </li>
           <li>
-            <strong>Percentiles:</strong> Distribution of expected damage gain
-            compared to not using d4s
+            <strong>Percentiles:</strong> Distribution of {viewMode === 'absolute' ? 'total expected damage when using the d4s' : 'expected damage gain compared to not using d4s'}
           </li>
           <li>
             <strong>Click column headers:</strong> Sort the table by any metric
