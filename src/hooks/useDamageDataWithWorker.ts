@@ -3,6 +3,7 @@ import { InputGroupValues } from '@/components/input-group';
 import { parseDamageString, isDiceExpression } from '@/utilities/dice';
 import { getDefaultValues } from '@/lib/presets';
 import { useWorkerCalculator } from './useWorkerCalculator';
+import { getCachedResult, setCachedResult, type CacheKey } from '@/utilities/calculation-cache';
 
 export interface DamageDataRow {
   d4Count: number;
@@ -112,6 +113,40 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
         // Calculate proficiency bonus
         const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
 
+        // Create cache key
+        const cacheKey: CacheKey = {
+          partyLevel,
+          monsterAC,
+          toHitBonus,
+          baseDamage: typeof baseDamage === 'string' ? baseDamage : String(baseDamage),
+          hasAdvantage: values.hasAdvantage,
+          viewMode: values.viewMode,
+        };
+
+        // Check cache first
+        const cachedResult = getCachedResult(cacheKey);
+        if (cachedResult) {
+          // Clear the show delay timer since we have instant results
+          if (showDelayTimerRef.current !== null) {
+            window.clearTimeout(showDelayTimerRef.current);
+            showDelayTimerRef.current = null;
+          }
+          
+          // Set result immediately from cache
+          setResult({
+            rows: cachedResult.rows,
+            boxPlotData: cachedResult.boxPlotData,
+            boxPlotColors: cachedResult.boxPlotColors,
+            categories: cachedResult.categories,
+            enableBoxPlot: cachedResult.enableBoxPlot,
+            consideringCrits: cachedResult.consideringCrits,
+            viewMode: values.viewMode,
+          });
+          setIsLoading(false);
+          setUsedWorker(false); // Cache hit, no worker needed
+          return;
+        }
+
         // Use worker calculation
         const calculationResult = await calculate(
           partyLevel,
@@ -157,7 +192,7 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
           categories.push(`${numD4s}d4`);
         }
 
-        setResult({
+        const resultData = {
           rows,
           categories,
           boxPlotData,
@@ -165,7 +200,12 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
           enableBoxPlot,
           consideringCrits,
           viewMode: values.viewMode,
-        });
+        };
+
+        setResult(resultData);
+
+        // Store in cache for instant future access
+        setCachedResult(cacheKey, resultData);
       } catch (error) {
         console.error('Error calculating damage data:', error);
       } finally {

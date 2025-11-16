@@ -3,6 +3,7 @@ import { InputGroupValues } from '@/components/input-group';
 import { calculateBatchDamageStats } from '@/utilities/batch-calculator';
 import { parseDamageString, isDiceExpression } from '@/utilities/dice';
 import { getDefaultValues } from '@/lib/presets';
+import { getCachedResult, setCachedResult, type CacheKey } from '@/utilities/calculation-cache';
 
 export interface DamageDataRow {
   d4Count: number;
@@ -69,6 +70,31 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
 
     // Calculate proficiency bonus
     const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
+
+    // Create cache key
+    const cacheKey: CacheKey = {
+      partyLevel,
+      monsterAC,
+      toHitBonus,
+      baseDamage: typeof baseDamage === 'string' ? baseDamage : String(baseDamage),
+      hasAdvantage: values.hasAdvantage,
+      viewMode: values.viewMode,
+    };
+
+    // Check cache first
+    const cachedResult = getCachedResult(cacheKey);
+    if (cachedResult) {
+      // Return cached result immediately
+      return {
+        rows: cachedResult.rows,
+        boxPlotData: cachedResult.boxPlotData,
+        boxPlotColors: cachedResult.boxPlotColors,
+        categories: cachedResult.categories,
+        enableBoxPlot: cachedResult.enableBoxPlot,
+        consideringCrits: cachedResult.consideringCrits,
+        viewMode: values.viewMode,
+      };
+    }
 
     // Use batch calculation for all d4 counts at once - much more efficient!
     const start = performance.now();
@@ -159,6 +185,19 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
       categories.push(`${numD4s}d4`);
     }
 
-    return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot, consideringCrits, viewMode: values.viewMode };
+    const result = { 
+      rows, 
+      boxPlotData, 
+      boxPlotColors, 
+      categories, 
+      enableBoxPlot, 
+      consideringCrits, 
+      viewMode: values.viewMode 
+    };
+
+    // Store in cache for instant future access
+    setCachedResult(cacheKey, result);
+
+    return result;
   }, [values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus, values.hasAdvantage, values.viewMode]);
 };

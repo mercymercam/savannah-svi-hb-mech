@@ -5,6 +5,7 @@ import { DamageTable } from './components/table'
 import { useInputStore } from './stores/inputStore'
 import { useDamageDataWithWorker } from './hooks/useDamageDataWithWorker'
 import { warmUpCalculations } from './utilities/warm-up'
+import { setupCacheDebug } from './utilities/calculation-cache'
 import { Spinner } from './components/ui/spinner'
 import './App.css'
 
@@ -17,6 +18,9 @@ function App() {
     Promise.resolve().then(() => {
       warmUpCalculations();
     });
+    
+    // Setup cache debug tools (only runs once)
+    setupCacheDebug();
   }, []);
   
   const inputValues = useMemo(
