@@ -125,6 +125,32 @@ Created `batch-calculator.ts` for efficient bulk calculations:
     - Memoized columns definition
     - Optimized TanStack Table rendering
 
+### Phase 5: Web Workers (Optional - Ready for Testing)
+11. **src/workers/damage-calculator.worker.ts** (new)
+    - Runs calculations in background thread
+    - Keeps UI responsive during heavy calculations
+    - Automatic fallback to main thread
+
+12. **src/hooks/useWorkerCalculator.ts** (new)
+    - Manages worker lifecycle
+    - Promise-based API
+    - 10-second timeout with graceful fallback
+
+13. **src/utilities/worker-comparison.test.ts** (new)
+    - Performance benchmarks
+    - Correctness validation
+    - See `WEB_WORKER_IMPLEMENTATION.md` for details
+
+### Phase 6: JIT Warm-up
+14. **src/utilities/warm-up.ts** (new)
+    - Pre-calls hot functions to trigger JIT optimization
+    - Runs during app initialization
+    - ~50ms one-time cost for ongoing performance benefit
+
+15. **src/App.tsx**
+    - Added warm-up call on mount
+    - Ensures calculations are optimized before user interaction
+
 ## Testing Results
 - ✅ All 181 existing tests pass
 - ✅ All validation tests pass (simulation vs direct calculation)

@@ -112,6 +112,7 @@ function calculatePercentilesFromDist(dist: RangeDist): number[] {
  * This shares the expensive base/crit damage distributions across all calculations
  * 
  * OPTIMIZED: Uses a single combineMany call for ALL d4 counts instead of one per count
+ * HOT PATH: This function is called on every input change and should be highly optimized
  * 
  * @returns Array of percentile arrays, one for each d4Count from 1 to proficiencyBonus
  */
