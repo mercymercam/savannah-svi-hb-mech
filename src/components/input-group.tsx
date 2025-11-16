@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { FieldSet } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -81,7 +81,7 @@ const getPlaceholderValues = (values: InputGroupValues): Omit<InputGroupValues, 
 };
 
 export const InputGroup: React.FC<InputGroupProps> = ({ values, onChange }) => {
-  const placeholders = useMemo(() => getPlaceholderValues(values), [values]);
+  const placeholders = getPlaceholderValues(values);
 
   const handleChange = (field: keyof InputGroupValues, newValue: string | boolean) => {
     const updated = { ...values, [field]: newValue };
