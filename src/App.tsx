@@ -4,6 +4,7 @@ import { Chart } from './components/chart'
 import { DamageTable } from './components/table'
 import { useInputStore } from './stores/inputStore'
 import { useDamageDataWithWorker } from './hooks/useDamageDataWithWorker'
+import { usePreloadCache } from './hooks/usePreloadCache'
 import { warmUpCalculations } from './utilities/warm-up'
 import { setupCacheDebug } from './utilities/calculation-cache'
 import { Spinner } from './components/ui/spinner'
@@ -30,6 +31,13 @@ function App() {
 
   // Calculate damage data using Web Worker with loading state
   const damageData = useDamageDataWithWorker(inputValues)
+
+  // Preload cache when mouse approaches toggle switches
+  usePreloadCache({ 
+    values: inputValues, 
+    enabled: true,
+    proximityThreshold: 384  // ~4 inches at 96 DPI
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">

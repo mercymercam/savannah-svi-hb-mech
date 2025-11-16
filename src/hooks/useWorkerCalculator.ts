@@ -23,7 +23,7 @@ type PendingRequest = {
  * Provides automatic fallback to main thread if worker fails
  */
 export function useWorkerCalculator(options: UseWorkerCalculatorOptions = {}) {
-  const { enabled = true, timeout = 10000 } = options;
+  const { enabled = true, timeout = 60000 } = options;
   
   const workerRef = useRef<Worker | null>(null);
   const pendingRequests = useRef<Map<string, PendingRequest>>(new Map());
