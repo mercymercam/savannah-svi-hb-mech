@@ -47,15 +47,15 @@ const validators = {
     
     // Check if it's dice notation with arbitrary sequences (e.g., "3d6+5" or "1d10+3d8-5")
     if (/^([+-])?(?:\d+d\d+|[\d.]+)(?:[+-](?:\d+d\d+|[\d.]+))*$/i.test(value)) {
-      // Extract all dice expressions and validate die size is <= 20
+      // Extract all dice expressions and validate die size is <= 100
       const diceMatches = value.match(/\d*d(\d+)/gi);
       if (diceMatches) {
         for (const diceExpr of diceMatches) {
           const dieSizeMatch = diceExpr.match(/d(\d+)/i);
           if (dieSizeMatch) {
             const dieSize = parseInt(dieSizeMatch[1], 10);
-            if (dieSize > 20) {
-              return { valid: false, error: 'Dice size must be d20 or smaller' };
+            if (dieSize > 100) {
+              return { valid: false, error: 'Dice size must be d100 or smaller' };
             }
           }
         }
