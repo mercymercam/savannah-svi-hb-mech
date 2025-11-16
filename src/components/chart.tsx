@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import * as echarts from 'echarts';
-import { InputGroupValues } from './input-group';
-import { useDamageData } from '@/hooks/useDamageData';
+import { UseDamageDataResult } from '@/hooks/useDamageData';
 
 
 interface ChartProps {
-  values: InputGroupValues;
+  damageData: UseDamageDataResult;
 }
 
-export const Chart: React.FC<ChartProps> = ({ values }) => {
+export const Chart: React.FC<ChartProps> = ({ damageData }) => {
   const [showBarChart, setShowBarChart] = useState(false);
   const chartRef = React.useRef<HTMLDivElement>(null);
-  const { boxPlotData, categories, boxPlotColors, enableBoxPlot, consideringCrits, viewMode } = useDamageData(values);
+  const { boxPlotData, categories, boxPlotColors, enableBoxPlot, consideringCrits, viewMode } = damageData;
 
   React.useEffect(() => {
     if (!chartRef.current) return;

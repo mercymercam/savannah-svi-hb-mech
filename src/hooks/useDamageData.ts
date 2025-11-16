@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useMemo } from 'react';
 import { InputGroupValues } from '@/components/input-group';
 import { calculateDamageStats } from '@/utilities/utilities';
 import { parseDamageString, isDiceExpression } from '@/utilities/dice';
@@ -40,117 +40,119 @@ export interface UseDamageDataResult {
 export const useDamageData = (values: InputGroupValues): UseDamageDataResult => {
   const previousValidDamageRef = useRef<number>(8.5);
   
-  // Get the default values based on the preset logic
-  const defaults = getDefaultValues(values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus);
-  
-  // Use the actual value if provided, otherwise use the preset default
-  const partyLevel = values.partyLevel ? parseInt(values.partyLevel, 10) : parseInt(defaults.partyLevel, 10);
-  const monsterAC = values.monsterAC ? parseInt(values.monsterAC, 10) : parseInt(defaults.monsterAC, 10);
-  const toHitBonus = values.toHitBonus ? parseInt(values.toHitBonus, 10) : parseInt(defaults.toHitBonus, 10);
-  
-  // For baseDamage, use the actual value if provided, otherwise use the preset default
-  const baseDamageString = values.baseDamage || defaults.baseDamage;
-  
-  // Check if we're considering crits (dice expressions only)
-  const consideringCrits = isDiceExpression(baseDamageString);
-  
-  // Check if baseDamage is a simple number
-  const enableBoxPlot = true; //isSimpleNumber(baseDamageString);
-  
-  // Parse base damage (handles both simple numbers and dice notation)
-  const parsedDamage = parseDamageString(baseDamageString);
-  const baseDamage = parsedDamage !== null ? baseDamageString : previousValidDamageRef.current;
-  
-  // Update the previous valid damage if we have a valid parse
-  if (parsedDamage !== null) {
-    previousValidDamageRef.current = parsedDamage;
-  }
-
-  // Calculate proficiency bonus
-  const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
-
-  // Generate data for 1 to proficiencyBonus d4s
-  const rows: DamageDataRow[] = [];
-  const boxPlotData: number[][] = [];
-  const boxPlotColors: string[] = [];
-  const categories: string[] = [];
-
-  for (let numD4s = 1; numD4s <= proficiencyBonus; numD4s++) {
-    const stats = calculateDamageStats(
-      numD4s,
-      partyLevel,
-      monsterAC,
-      toHitBonus,
-      baseDamage,
-      values.hasAdvantage,
-      values.viewMode
-    );
-    const isValidStats = Array.isArray(stats)
-      && stats.length === 5
-      && stats.every((v, i, arr) => typeof v === 'number' && Number.isFinite(v) && (i === 0 || v >= arr[i - 1]));
-
-    if (!isValidStats) {
-      console.error(`calculateDamageStats returned invalid stats for ${numD4s}d4 — expected 5 numeric values in non-decreasing order, got: ${JSON.stringify(stats)}`);
+  return useMemo(() => {
+    // Get the default values based on the preset logic
+    const defaults = getDefaultValues(values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus);
+    
+    // Use the actual value if provided, otherwise use the preset default
+    const partyLevel = values.partyLevel ? parseInt(values.partyLevel, 10) : parseInt(defaults.partyLevel, 10);
+    const monsterAC = values.monsterAC ? parseInt(values.monsterAC, 10) : parseInt(defaults.monsterAC, 10);
+    const toHitBonus = values.toHitBonus ? parseInt(values.toHitBonus, 10) : parseInt(defaults.toHitBonus, 10);
+    
+    // For baseDamage, use the actual value if provided, otherwise use the preset default
+    const baseDamageString = values.baseDamage || defaults.baseDamage;
+    
+    // Check if we're considering crits (dice expressions only)
+    const consideringCrits = isDiceExpression(baseDamageString);
+    
+    // Check if baseDamage is a simple number
+    const enableBoxPlot = true; //isSimpleNumber(baseDamageString);
+    
+    // Parse base damage (handles both simple numbers and dice notation)
+    const parsedDamage = parseDamageString(baseDamageString);
+    const baseDamage = parsedDamage !== null ? baseDamageString : previousValidDamageRef.current;
+    
+    // Update the previous valid damage if we have a valid parse
+    if (parsedDamage !== null) {
+      previousValidDamageRef.current = parsedDamage;
     }
 
-    // Add to table data
-    rows.push({
-      d4Count: numD4s,
-      p5: stats[0],
-      q1: stats[1],
-      median: stats[2],
-      q3: stats[3],
-      p95: stats[4],
-    });
+    // Calculate proficiency bonus
+    const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
 
-    // Add to chart data
-    boxPlotData.push(stats);
-    
-    // Determine color based on view mode:
-    // In relative mode (delta):
-    //   - If median > 0: green (gain)
-    //   - If median < 0: red (loss)
-    //   - If median = 0: check q1 and q3 for decision
-    // In absolute mode:
-    //   - Use blue for all (just showing damage, not gain/loss)
-    const median = stats[2];
-    const q1 = stats[1];
-    const q3 = stats[3];
-    
-    let color: string;
-    if (values.viewMode === 'absolute') {
-      // In absolute mode, use a consistent blue color
-      color = 'rgb(59, 130, 246)'; // blue
-    } else {
-      // In relative mode, use green/red based on gain/loss
-      if (median > 0) {
-        color = 'rgb(34, 197, 94)'; // green
-      } else if (median < 0) {
-        color = 'rgb(239, 68, 68)'; // red
+    // Generate data for 1 to proficiencyBonus d4s
+    const rows: DamageDataRow[] = [];
+    const boxPlotData: number[][] = [];
+    const boxPlotColors: string[] = [];
+    const categories: string[] = [];
+
+    for (let numD4s = 1; numD4s <= proficiencyBonus; numD4s++) {
+      const stats = calculateDamageStats(
+        numD4s,
+        partyLevel,
+        monsterAC,
+        toHitBonus,
+        baseDamage,
+        values.hasAdvantage,
+        values.viewMode
+      );
+      const isValidStats = Array.isArray(stats)
+        && stats.length === 5
+        && stats.every((v, i, arr) => typeof v === 'number' && Number.isFinite(v) && (i === 0 || v >= arr[i - 1]));
+
+      if (!isValidStats) {
+        console.error(`calculateDamageStats returned invalid stats for ${numD4s}d4 — expected 5 numeric values in non-decreasing order, got: ${JSON.stringify(stats)}`);
+      }
+
+      // Add to table data
+      rows.push({
+        d4Count: numD4s,
+        p5: stats[0],
+        q1: stats[1],
+        median: stats[2],
+        q3: stats[3],
+        p95: stats[4],
+      });
+
+      // Add to chart data
+      boxPlotData.push(stats);
+      
+      // Determine color based on view mode:
+      // In relative mode (delta):
+      //   - If median > 0: green (gain)
+      //   - If median < 0: red (loss)
+      //   - If median = 0: check q1 and q3 for decision
+      // In absolute mode:
+      //   - Use blue for all (just showing damage, not gain/loss)
+      const median = stats[2];
+      const q1 = stats[1];
+      const q3 = stats[3];
+      
+      let color: string;
+      if (values.viewMode === 'absolute') {
+        // In absolute mode, use a consistent blue color
+        color = 'rgb(59, 130, 246)'; // blue
       } else {
-        // median === 0
-        if (q1 === 0 && q3 === 0) {
-          color = 'rgb(34, 197, 94)'; // green (all zeros)
-        } else if (q1 === 0) {
-          color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
-        } else if (q3 === 0) {
-          color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+        // In relative mode, use green/red based on gain/loss
+        if (median > 0) {
+          color = 'rgb(34, 197, 94)'; // green
+        } else if (median < 0) {
+          color = 'rgb(239, 68, 68)'; // red
         } else {
-          // Both q1 and q3 are non-zero, compare absolute values
-          const absQ1 = Math.abs(q1);
-          const absQ3 = Math.abs(q3);
-          if (absQ1 > absQ3) {
+          // median === 0
+          if (q1 === 0 && q3 === 0) {
+            color = 'rgb(34, 197, 94)'; // green (all zeros)
+          } else if (q1 === 0) {
+            color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+          } else if (q3 === 0) {
             color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
           } else {
-            color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+            // Both q1 and q3 are non-zero, compare absolute values
+            const absQ1 = Math.abs(q1);
+            const absQ3 = Math.abs(q3);
+            if (absQ1 > absQ3) {
+              color = q1 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+            } else {
+              color = q3 >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+            }
           }
         }
       }
+      
+      boxPlotColors.push(color);
+      categories.push(`${numD4s}d4`);
     }
-    
-    boxPlotColors.push(color);
-    categories.push(`${numD4s}d4`);
-  }
 
-  return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot, consideringCrits, viewMode: values.viewMode };
+    return { rows, boxPlotData, boxPlotColors, categories, enableBoxPlot, consideringCrits, viewMode: values.viewMode };
+  }, [values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus, values.hasAdvantage, values.viewMode]);
 };

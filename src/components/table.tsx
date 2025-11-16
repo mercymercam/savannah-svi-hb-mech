@@ -19,11 +19,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { InputGroupValues } from './input-group';
-import { useDamageData, DamageDataRow } from '@/hooks/useDamageData';
+import { UseDamageDataResult, DamageDataRow } from '@/hooks/useDamageData';
 
 interface DataTableProps {
-  values: InputGroupValues;
+  damageData: UseDamageDataResult;
 }
 
 // Sortable column header component
@@ -126,13 +125,13 @@ const columns: ColumnDef<DamageDataRow>[] = [
   },
 ];
 
-export const DamageTable: React.FC<DataTableProps> = ({ values }) => {
+export const DamageTable: React.FC<DataTableProps> = ({ damageData }) => {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'd4Count', desc: false },
   ]);
 
-  // Get table data from hook
-  const { rows: tableData, viewMode } = useDamageData(values);
+  // Get table data from prop
+  const { rows: tableData, viewMode } = damageData;
 
   const table = useReactTable({
     data: tableData,

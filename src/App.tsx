@@ -1,13 +1,21 @@
+import { useMemo } from 'react'
 import { InputGroup } from './components/input-group'
 import { Chart } from './components/chart'
 import { DamageTable } from './components/table'
 import { useInputStore } from './stores/inputStore'
+import { useDamageData } from './hooks/useDamageData'
 import './App.css'
 
 function App() {
   const { monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, viewMode, setValues } = useInputStore()
   
-  const inputValues = { monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, viewMode }
+  const inputValues = useMemo(
+    () => ({ monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, viewMode }),
+    [monsterAC, partyLevel, baseDamage, toHitBonus, hasAdvantage, viewMode]
+  )
+
+  // Calculate damage data once and pass to both Chart and Table
+  const damageData = useDamageData(inputValues)
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">
@@ -28,7 +36,7 @@ function App() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Chart Section */}
         <div className="mb-12">
-          <Chart values={inputValues} />
+          <Chart damageData={damageData} />
         </div>
 
         {/* Table Section */}
@@ -40,7 +48,7 @@ function App() {
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Detailed breakdown of expected damage distribution for each d4 penalty option
             </p>
-            <DamageTable values={inputValues} />
+            <DamageTable damageData={damageData} />
           </div>
         </div>
 

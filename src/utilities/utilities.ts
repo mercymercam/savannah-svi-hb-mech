@@ -365,43 +365,43 @@ export const calculateDirectlyDamageStats = (
   //   - Otherwise: if d20 + attackBonus - d4 >= AC: hit (base damage + 2*d4), else miss (0 damage)
   //   - In relative mode: Delta = damage_with_d4s - damage_baseline
   //   - In absolute mode: Return damage_with_d4s
-  const damageDeltaDist = d20Dist.map((d20Roll: number) => {
-    return d4Dist.map((d4Value: number) => {
-      if (considerCrits) {
-        // When considering crits, we need to handle critical hits differently
-        return baseDamageDist.map((baseDmg: number) => {
-          return critDamageDist.map((critDmg: number) => {
-            // Calculate damage without d4s for this scenario (only needed in relative mode)
-            let damageWithoutD4s = 0;
-            if (viewMode === 'relative') {
-              if (d20Roll === 1) {
-                damageWithoutD4s = 0; // Auto-miss
-              } else if (d20Roll === 20) {
-                damageWithoutD4s = critDmg; // Crit hit with crit damage
-              } else {
-                const rollWithoutD4s = d20Roll + attackBonus;
-                damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
-              }
-            }
-            
-            // Calculate damage with d4s for this scenario
-            let damageWithD4s: number;
+  
+  // Use optimized combineMany instead of nested maps for much better performance
+  const damageDeltaDist = considerCrits
+    ? RangeDist.combineMany(
+        [d20Dist, d4Dist, baseDamageDist, critDamageDist],
+        ([d20Roll, d4Value, baseDmg, critDmg]) => {
+          // Calculate damage without d4s for this scenario (only needed in relative mode)
+          let damageWithoutD4s = 0;
+          if (viewMode === 'relative') {
             if (d20Roll === 1) {
-              damageWithD4s = 0; // Auto-miss
+              damageWithoutD4s = 0; // Auto-miss
             } else if (d20Roll === 20) {
-              damageWithD4s = critDmg + (d4Value * 2); // Crit hit with crit damage and bonus
+              damageWithoutD4s = critDmg; // Crit hit with crit damage
             } else {
-              const rollWithD4s = d20Roll + attackBonus - d4Value;
-              damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
+              const rollWithoutD4s = d20Roll + attackBonus;
+              damageWithoutD4s = rollWithoutD4s >= monsterAC ? baseDmg : 0;
             }
-            
-            // Return the delta or absolute value based on viewMode
-            return viewMode === 'absolute' ? damageWithD4s : (damageWithD4s - damageWithoutD4s);
-          });
-        });
-      } else {
-        // When not considering crits, treat everything as non-crit
-        return baseDamageDist.map((baseDmg: number) => {
+          }
+          
+          // Calculate damage with d4s for this scenario
+          let damageWithD4s: number;
+          if (d20Roll === 1) {
+            damageWithD4s = 0; // Auto-miss
+          } else if (d20Roll === 20) {
+            damageWithD4s = critDmg + (d4Value * 2); // Crit hit with crit damage and bonus
+          } else {
+            const rollWithD4s = d20Roll + attackBonus - d4Value;
+            damageWithD4s = rollWithD4s >= monsterAC ? (baseDmg + (d4Value * 2)) : 0;
+          }
+          
+          // Return the delta or absolute value based on viewMode
+          return viewMode === 'absolute' ? damageWithD4s : (damageWithD4s - damageWithoutD4s);
+        }
+      )
+    : RangeDist.combineMany(
+        [d20Dist, d4Dist, baseDamageDist],
+        ([d20Roll, d4Value, baseDmg]) => {
           // Calculate damage without d4s for this scenario (only needed in relative mode)
           let damageWithoutD4s = 0;
           if (viewMode === 'relative') {
@@ -428,10 +428,8 @@ export const calculateDirectlyDamageStats = (
           
           // Return the delta or absolute value based on viewMode
           return viewMode === 'absolute' ? damageWithD4s : (damageWithD4s - damageWithoutD4s);
-        });
-      }
-    });
-  });
+        }
+      );
   
   // Calculate percentiles from the damage delta distribution
   const percentiles = calculatePercentilesFromDist(damageDeltaDist);

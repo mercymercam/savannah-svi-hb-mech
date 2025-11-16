@@ -327,6 +327,70 @@ class RangeDist {
   }
 
   /**
+   * Optimized version of nested map operations for combining multiple distributions.
+   * Instead of nested map calls which create intermediate distributions, this directly
+   * computes the final distribution by iterating through all combinations once.
+   * 
+   * This is significantly faster for complex calculations like 4-way combinations.
+   * 
+   * @param dists - Array of RangeDist objects to combine
+   * @param func - Function that takes an array of values (one from each distribution) and returns a number
+   * @returns A new RangeDist representing the combined distribution
+   */
+  static combineMany(
+    dists: RangeDist[],
+    func: (values: number[]) => number
+  ): RangeDist {
+    if (dists.length === 0) {
+      throw new Error("At least one distribution must be provided");
+    }
+
+    // Use a Map to accumulate probabilities for each outcome
+    const outcomes = new Map<number, number>();
+
+    // Recursive function to iterate through all combinations
+    const iterate = (depth: number, values: number[], probProduct: number) => {
+      if (depth === dists.length) {
+        // We've selected a value from each distribution
+        const result = func(values);
+        outcomes.set(result, (outcomes.get(result) || 0) + probProduct);
+        return;
+      }
+
+      const dist = dists[depth];
+      for (let i = 0; i < dist.p.length; i++) {
+        const value = dist.min + i;
+        const prob = dist.p[i];
+        
+        // Skip if probability is zero (optimization)
+        if (prob === 0) continue;
+        
+        values[depth] = value;
+        iterate(depth + 1, values, probProduct * prob);
+      }
+    };
+
+    // Start the iteration
+    iterate(0, new Array(dists.length), 1.0);
+
+    // Convert Map to RangeDist
+    if (outcomes.size === 0) {
+      return RangeDist.literal(0);
+    }
+
+    const sortedValues = Array.from(outcomes.keys()).sort((a, b) => a - b);
+    const min = sortedValues[0];
+    const max = sortedValues[sortedValues.length - 1];
+    const p = new Float64Array(max - min + 1);
+
+    for (const [value, prob] of outcomes) {
+      p[value - min] = prob;
+    }
+
+    return new RangeDist(min, max, p);
+  }
+
+  /**
    * If-then-else construct for Boolean RangeDist
    * Simple wrapper around map that applies conditional logic
    */
