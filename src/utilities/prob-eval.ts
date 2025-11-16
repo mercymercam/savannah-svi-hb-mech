@@ -1,3 +1,5 @@
+import { convolve as wasmConvolve, isWasmAvailable } from './wasm-bridge';
+
 /**
  * RangeDist - A class for representing and manipulating discrete probability distributions over integer ranges
  */
@@ -153,6 +155,17 @@ class RangeDist {
   }
 
   private static convolve(a: Float64Array, b: Float64Array): Float64Array {
+    // Try WASM first for better performance
+    if (isWasmAvailable()) {
+      try {
+        return wasmConvolve(a, b);
+      } catch (error) {
+        console.warn('WASM convolve failed, falling back to JS:', error);
+        // Fall through to JavaScript implementation
+      }
+    }
+    
+    // JavaScript fallback
     const result = new Float64Array(a.length + b.length - 1);
     for (let i = 0; i < a.length; i++) {
       for (let j = 0; j < b.length; j++) {

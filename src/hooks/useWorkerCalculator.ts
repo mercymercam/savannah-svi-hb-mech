@@ -52,6 +52,14 @@ export function useWorkerCalculator(options: UseWorkerCalculatorOptions = {}) {
         const pending = pendingRequests.current.get(id);
         if (!pending) return;
 
+        // Mark when response received
+        performance.mark(`main-response-received-${id}`);
+        performance.measure(
+          `Main: Message Round Trip (${id})`,
+          `main-request-sent-${id}`,
+          `main-response-received-${id}`
+        );
+
         // Clear timeout
         if (pending.timeoutId) {
           window.clearTimeout(pending.timeoutId);
@@ -62,11 +70,18 @@ export function useWorkerCalculator(options: UseWorkerCalculatorOptions = {}) {
         if (type === 'error') {
           pending.reject(new Error(error || 'Worker calculation failed'));
         } else if (type === 'result' && payload) {
+          performance.mark(`main-resolve-start-${id}`);
           pending.resolve({
             results: payload,
             timing: timing || 0,
             usedWorker: true,
           });
+          performance.mark(`main-resolve-end-${id}`);
+          performance.measure(
+            `Main: Resolve Promise (${id})`,
+            `main-resolve-start-${id}`,
+            `main-resolve-end-${id}`
+          );
         }
       };
 
@@ -158,6 +173,9 @@ export function useWorkerCalculator(options: UseWorkerCalculatorOptions = {}) {
       return new Promise((resolve, reject) => {
         const id = `req-${++requestIdCounter.current}`;
         
+        // Mark when request starts
+        performance.mark(`main-request-start-${id}`);
+        
         const timeoutId = window.setTimeout(() => {
           pendingRequests.current.delete(id);
           console.warn('Worker timeout, falling back to main thread');
@@ -204,7 +222,15 @@ export function useWorkerCalculator(options: UseWorkerCalculatorOptions = {}) {
           },
         };
 
+        // Mark before postMessage
+        performance.mark(`main-postmessage-start-${id}`);
         workerRef.current!.postMessage(request);
+        performance.mark(`main-request-sent-${id}`);
+        performance.measure(
+          `Main: PostMessage to Worker (${id})`,
+          `main-postmessage-start-${id}`,
+          `main-request-sent-${id}`
+        );
       });
     },
     [enabled, timeout]

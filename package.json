@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:wasm && tsc -b && vite build",
+    "build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../src/utilities/wasm-pkg",
     "test": "vitest run",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -45,6 +46,8 @@
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.5.0",
     "vitest": "^4.0.8"
   }
 }

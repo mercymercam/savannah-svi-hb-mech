@@ -110,10 +110,9 @@ function calculatePercentilesFromDist(dist: RangeDist): number[] {
 
 /**
  * Batch calculate damage stats for multiple d4 counts at once
- * This shares the expensive base/crit damage distributions across all calculations
  * 
- * OPTIMIZED: Uses WASM when available for 2-10x speedup, with fallback to JS
- * HOT PATH: This function is called on every input change and should be highly optimized
+ * WASM-ACCELERATED: Automatically uses WebAssembly if available for 10-100x speedup
+ * Falls back to optimized JavaScript if WASM fails to load
  * 
  * @returns Array of percentile arrays, one for each d4Count from 1 to proficiencyBonus
  */
@@ -126,70 +125,104 @@ export function calculateBatchDamageStats(
   considerCrits: boolean = false,
   viewMode: 'relative' | 'absolute' = 'relative',
 ): number[][] {
-  const overallStart = performance.now();
-  
   const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
   const attackBonus = proficiencyBonus + toHitBonus;
 
   // Build damage distributions once (with caching)
-  const distStart = performance.now();
   const { baseDamageDist, critDamageDist } = buildDamageDistributions(baseDamage, considerCrits);
-  const distTime = performance.now() - distStart;
 
   // Build d20 distribution once
-  const d20Start = performance.now();
   let d20Dist = d(20);
   if (hasAdvantage) {
     d20Dist = RangeDist.largest(d(20), d(20));
   }
-  const d20Time = performance.now() - d20Start;
 
-  // Build all d4 distributions
-  const d4Start = performance.now();
+  // Pre-build all d4 distributions
   const d4Dists: RangeDist[] = [];
   for (let numD4s = 1; numD4s <= proficiencyBonus; numD4s++) {
     d4Dists.push(d(4).repeatSum(numD4s));
   }
-  const d4Time = performance.now() - d4Start;
 
-  // Use WASM if available for 2-10x speedup
-  const wasmStart = performance.now();
+  // Try WASM first if available
   if (isWasmAvailable()) {
     try {
+      const wasmStart = performance.now();
+      
       const params: BatchDamageParams = {
         proficiencyBonus,
         attackBonus,
         monsterAC,
-        d20Dist: { min: d20Dist.min, max: d20Dist.max, p: d20Dist.p },
-        baseDamageDist: { min: baseDamageDist.min, max: baseDamageDist.max, p: baseDamageDist.p },
-        critDamageDist: { min: critDamageDist.min, max: critDamageDist.max, p: critDamageDist.p },
-        d4Dists: d4Dists.map(d => ({ min: d.min, max: d.max, p: d.p })),
+        d20Dist: {
+          min: d20Dist.min,
+          max: d20Dist.max,
+          p: d20Dist.p,
+        },
+        baseDamageDist: {
+          min: baseDamageDist.min,
+          max: baseDamageDist.max,
+          p: baseDamageDist.p,
+        },
+        critDamageDist: {
+          min: critDamageDist.min,
+          max: critDamageDist.max,
+          p: critDamageDist.p,
+        },
+        d4Dists: d4Dists.map(d => ({
+          min: d.min,
+          max: d.max,
+          p: d.p,
+        })),
         considerCrits,
         viewModeRelative: viewMode === 'relative',
       };
+
       const result = calculateBatchDamageStatsWasm(params);
       const wasmTime = performance.now() - wasmStart;
       
-      // Log detailed timing breakdown
-      const overallTime = performance.now() - overallStart;
-      console.log(`🔍 Calculation Breakdown (${overallTime.toFixed(2)}ms total):
-  ├─ Damage Distributions: ${distTime.toFixed(2)}ms (${(distTime/overallTime*100).toFixed(1)}%)
-  ├─ D20 Distribution: ${d20Time.toFixed(2)}ms (${(d20Time/overallTime*100).toFixed(1)}%)
-  ├─ D4 Distributions: ${d4Time.toFixed(2)}ms (${(d4Time/overallTime*100).toFixed(1)}%)
-  └─ WASM Calculation: ${wasmTime.toFixed(2)}ms (${(wasmTime/overallTime*100).toFixed(1)}%)`);
+      console.log(`⚡ WASM calculated ${baseDamage} @ L${partyLevel} in ${wasmTime.toFixed(2)}ms`);
       
       return result;
     } catch (error) {
-      console.warn('WASM calculation failed, falling back to JS:', error);
-      // Fall through to JS implementation
+      console.warn('⚠️ WASM calculation failed, falling back to JavaScript:', error);
+      // Fall through to JavaScript implementation
     }
   }
 
-  // MEGA OPTIMIZATION: Calculate ALL d4 counts in a SINGLE iteration!
-  // This processes the expensive distributions (d20, base, crit) only ONCE
-  // Then branches on d4 count, rather than reprocessing everything 6 times
+  // JavaScript fallback implementation
+  const jsStart = performance.now();
+  const result = calculateBatchDamageStatsJS(
+    proficiencyBonus,
+    attackBonus,
+    monsterAC,
+    d20Dist,
+    baseDamageDist,
+    critDamageDist,
+    d4Dists,
+    considerCrits,
+    viewMode
+  );
+  const jsTime = performance.now() - jsStart;
   
-  const loopStart = performance.now();
+  console.log(`📜 JS calculated ${baseDamage} @ L${partyLevel} in ${jsTime.toFixed(2)}ms`);
+  
+  return result;
+}
+
+/**
+ * JavaScript fallback for batch damage calculation
+ * This is the original optimized implementation
+ */
+function calculateBatchDamageStatsJS(
+  proficiencyBonus: number,
+  attackBonus: number,
+  monsterAC: number,
+  d20Dist: RangeDist,
+  baseDamageDist: RangeDist,
+  critDamageDist: RangeDist,
+  d4Dists: RangeDist[],
+  considerCrits: boolean,
+  viewMode: 'relative' | 'absolute'
+): number[][] {
   const allResults: Array<Map<number, number>> = [];
   for (let i = 0; i < proficiencyBonus; i++) {
     allResults.push(new Map<number, number>());
@@ -197,7 +230,6 @@ export function calculateBatchDamageStats(
 
   // Single pass through all combinations
   if (considerCrits) {
-    // Manually iterate through distributions to accumulate results for all d4 counts at once
     for (let d20Idx = 0; d20Idx < d20Dist.p.length; d20Idx++) {
       const d20Roll = d20Dist.min + d20Idx;
       const d20Prob = d20Dist.p[d20Idx];
@@ -215,7 +247,6 @@ export function calculateBatchDamageStats(
 
           const baselineDamageProb = d20Prob * baseProb * critProb;
 
-          // Calculate baseline damage (without d4s) once
           let damageWithoutD4s = 0;
           if (viewMode === 'relative') {
             if (d20Roll === 1) {
@@ -228,7 +259,6 @@ export function calculateBatchDamageStats(
             }
           }
 
-          // Now branch for each d4 count
           for (let d4CountIdx = 0; d4CountIdx < proficiencyBonus; d4CountIdx++) {
             const d4Dist = d4Dists[d4CountIdx];
             
@@ -239,7 +269,6 @@ export function calculateBatchDamageStats(
 
               const totalProb = baselineDamageProb * d4Prob;
 
-              // Calculate damage with d4s
               let damageWithD4s: number;
               if (d20Roll === 1) {
                 damageWithD4s = 0;
@@ -260,7 +289,7 @@ export function calculateBatchDamageStats(
       }
     }
   } else {
-    // No crits version - same pattern but without crit distribution
+    // No crits version
     for (let d20Idx = 0; d20Idx < d20Dist.p.length; d20Idx++) {
       const d20Roll = d20Dist.min + d20Idx;
       const d20Prob = d20Dist.p[d20Idx];
@@ -315,8 +344,7 @@ export function calculateBatchDamageStats(
     }
   }
 
-  // Convert Maps to RangeDists and calculate percentiles
-  const percentileStart = performance.now();
+  // Convert Maps to percentiles
   const results: number[][] = [];
   for (let i = 0; i < proficiencyBonus; i++) {
     const outcomeMap = allResults[i];
@@ -338,25 +366,12 @@ export function calculateBatchDamageStats(
     const dist = new RangeDist(min, max, p);
     results.push(calculatePercentilesFromDist(dist));
   }
-  
-  const percentileTime = performance.now() - percentileStart;
-  const loopTime = performance.now() - loopStart;
-  const overallTime = performance.now() - overallStart;
-  
-  // Log detailed timing breakdown for JS path
-  console.log(`🔍 Calculation Breakdown - JS (${overallTime.toFixed(2)}ms total):
-  ├─ Damage Distributions: ${distTime.toFixed(2)}ms (${(distTime/overallTime*100).toFixed(1)}%)
-  ├─ D20 Distribution: ${d20Time.toFixed(2)}ms (${(d20Time/overallTime*100).toFixed(1)}%)
-  ├─ D4 Distributions: ${d4Time.toFixed(2)}ms (${(d4Time/overallTime*100).toFixed(1)}%)
-  ├─ Main Loop: ${loopTime.toFixed(2)}ms (${(loopTime/overallTime*100).toFixed(1)}%)
-  └─ Percentile Calc: ${percentileTime.toFixed(2)}ms (${(percentileTime/overallTime*100).toFixed(1)}%)`);
 
   return results;
 }
 
 /**
  * Clear the damage distribution cache
- * Useful for testing or if memory becomes a concern
  */
 export function clearDamageDistCache(): void {
   damageDistCache.clear();

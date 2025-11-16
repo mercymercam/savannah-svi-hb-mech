@@ -63,6 +63,10 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
 
   useEffect(() => {
     const calculateData = async () => {
+      // Mark the start of the effect
+      const effectId = `effect-${Date.now()}`;
+      performance.mark(`effect-start-${effectId}`);
+      
       // Clear any existing timers
       if (showDelayTimerRef.current !== null) {
         window.clearTimeout(showDelayTimerRef.current);
@@ -84,6 +88,7 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
       }, 500);
 
       try {
+        performance.mark(`effect-parse-start-${effectId}`);
         // Get the default values based on the preset logic
         const defaults = getDefaultValues(values.partyLevel, values.monsterAC, values.baseDamage, values.toHitBonus);
         
@@ -97,6 +102,12 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
         
         // Check if we're considering crits (dice expressions only)
         const consideringCrits = isDiceExpression(baseDamageString);
+        performance.mark(`effect-parse-end-${effectId}`);
+        performance.measure(
+          `React: Parse Inputs (${effectId})`,
+          `effect-parse-start-${effectId}`,
+          `effect-parse-end-${effectId}`
+        );
         
         // Check if baseDamage is a simple number
         const enableBoxPlot = true;
@@ -114,6 +125,7 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
         const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
 
         // Create cache key
+        performance.mark(`effect-cache-check-start-${effectId}`);
         const cacheKey: CacheKey = {
           partyLevel,
           monsterAC,
@@ -125,6 +137,13 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
 
         // Check cache first
         const cachedResult = getCachedResult(cacheKey);
+        performance.mark(`effect-cache-check-end-${effectId}`);
+        performance.measure(
+          `React: Cache Check (${effectId})`,
+          `effect-cache-check-start-${effectId}`,
+          `effect-cache-check-end-${effectId}`
+        );
+        
         if (cachedResult) {
           // Clear the show delay timer since we have instant results
           if (showDelayTimerRef.current !== null) {
@@ -144,10 +163,18 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
           });
           setIsLoading(false);
           setUsedWorker(false); // Cache hit, no worker needed
+          
+          performance.mark(`effect-end-${effectId}`);
+          performance.measure(
+            `React: Total Effect (CACHE HIT) (${effectId})`,
+            `effect-start-${effectId}`,
+            `effect-end-${effectId}`
+          );
           return;
         }
 
         // Use worker calculation
+        performance.mark(`effect-worker-call-start-${effectId}`);
         const calculationResult = await calculate(
           partyLevel,
           monsterAC,
@@ -157,9 +184,30 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
           consideringCrits,
           values.viewMode
         );
+        performance.mark(`effect-worker-call-end-${effectId}`);
+        performance.measure(
+          `React: Worker Calculate Call (${effectId})`,
+          `effect-worker-call-start-${effectId}`,
+          `effect-worker-call-end-${effectId}`
+        );
 
+        performance.mark(`effect-process-results-start-${effectId}`);
         const allStats = calculationResult.results;
         setUsedWorker(calculationResult.usedWorker);
+
+        // Create a synthetic performance measure for the worker calculation time
+        // (Worker's performance timeline is separate, so we manually record it here)
+        if (calculationResult.usedWorker && calculationResult.timing > 0) {
+          // Record the worker timing as a measure on the main thread
+          // We'll use dummy marks and set them to create the right duration
+          const now = performance.now();
+          const workerStartTime = now - calculationResult.timing;
+          
+          performance.measure(
+            `Worker: Calculation (from worker)`,
+            { start: workerStartTime, duration: calculationResult.timing }
+          );
+        }
 
         console.log(`⚡ ${calculationResult.usedWorker ? 'Worker' : 'Main thread'} calculated ${proficiencyBonus} d4 options with ${baseDamage} in ${calculationResult.timing.toFixed(2)}ms`);
 
@@ -206,6 +254,20 @@ export const useDamageDataWithWorker = (values: InputGroupValues): UseDamageData
 
         // Store in cache for instant future access
         setCachedResult(cacheKey, resultData);
+        
+        performance.mark(`effect-process-results-end-${effectId}`);
+        performance.measure(
+          `React: Process & Set Results (${effectId})`,
+          `effect-process-results-start-${effectId}`,
+          `effect-process-results-end-${effectId}`
+        );
+        
+        performance.mark(`effect-end-${effectId}`);
+        performance.measure(
+          `React: Total Effect (WORKER) (${effectId})`,
+          `effect-start-${effectId}`,
+          `effect-end-${effectId}`
+        );
       } catch (error) {
         console.error('Error calculating damage data:', error);
       } finally {

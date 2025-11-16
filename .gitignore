@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# WASM build output
+src/utilities/wasm-pkg
+wasm/target
+wasm/Cargo.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

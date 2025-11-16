@@ -24,4 +24,7 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  worker: {
+    format: 'es', // Use ES modules for workers
+  },
 })
