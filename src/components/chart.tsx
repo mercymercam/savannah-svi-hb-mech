@@ -41,6 +41,11 @@ export const Chart: React.FC<ChartProps> = memo(({ damageData }) => {
       });
 
       const option: echarts.EChartsOption = {
+        animation: true,
+        animationDuration: 333,
+        animationDurationUpdate: 100,
+        animationEasing: 'cubicOut',
+        animationEasingUpdate: 'cubicOut',
         title: {
           text: `${viewMode === 'absolute' ? 'Total Expected Damage' : 'Expected Damage Gain'} by d4 Penalty (Median Values)${consideringCrits ? ' - Including Critical Hits' : ''}`,
           left: 'center',
@@ -121,9 +126,14 @@ export const Chart: React.FC<ChartProps> = memo(({ damageData }) => {
         dark: false,
       };
 
-      chart.setOption(option);
+      chart.setOption(option, { notMerge: false, lazyUpdate: false });
     } else {
       const option: echarts.EChartsOption = {
+        animation: true,
+        animationDuration: 333,
+        animationDurationUpdate: 100,
+        animationEasing: 'cubicOut',
+        animationEasingUpdate: 'cubicOut',
         title: {
           text: `${viewMode === 'absolute' ? 'Total Expected Damage' : 'Expected Damage'} Distribution by d4 Penalty${consideringCrits ? ' - Including Critical Hits' : ''}`,
           left: 'center',
@@ -210,7 +220,7 @@ export const Chart: React.FC<ChartProps> = memo(({ damageData }) => {
         dark: false,
       };
 
-      chart.setOption(option);
+      chart.setOption(option, { notMerge: false, lazyUpdate: false });
     }
 
     const handleResize = () => {
