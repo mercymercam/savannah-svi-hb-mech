@@ -1,6 +1,6 @@
 import { useRef, useMemo } from 'react';
 import { InputGroupValues } from '@/components/input-group';
-import { calculateDamageStats } from '@/utilities/utilities';
+import { calculateBatchDamageStats } from '@/utilities/batch-calculator';
 import { parseDamageString, isDiceExpression } from '@/utilities/dice';
 import { getDefaultValues } from '@/lib/presets';
 
@@ -70,6 +70,20 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
     // Calculate proficiency bonus
     const proficiencyBonus = Math.ceil(partyLevel / 4) + 1;
 
+    // Use batch calculation for all d4 counts at once - much more efficient!
+    const start = performance.now();
+    const allStats = calculateBatchDamageStats(
+      partyLevel,
+      monsterAC,
+      toHitBonus,
+      typeof baseDamage === 'string' ? baseDamage : String(baseDamage),
+      values.hasAdvantage,
+      consideringCrits,
+      values.viewMode
+    );
+    const elapsed = performance.now() - start;
+    console.log(`⚡ Batch calculated ${proficiencyBonus} d4 options with ${baseDamage} in ${elapsed.toFixed(2)}ms`);
+
     // Generate data for 1 to proficiencyBonus d4s
     const rows: DamageDataRow[] = [];
     const boxPlotData: number[][] = [];
@@ -77,15 +91,7 @@ export const useDamageData = (values: InputGroupValues): UseDamageDataResult => 
     const categories: string[] = [];
 
     for (let numD4s = 1; numD4s <= proficiencyBonus; numD4s++) {
-      const stats = calculateDamageStats(
-        numD4s,
-        partyLevel,
-        monsterAC,
-        toHitBonus,
-        baseDamage,
-        values.hasAdvantage,
-        values.viewMode
-      );
+      const stats = allStats[numD4s - 1]; // Get pre-calculated stats
       const isValidStats = Array.isArray(stats)
         && stats.length === 5
         && stats.every((v, i, arr) => typeof v === 'number' && Number.isFinite(v) && (i === 0 || v >= arr[i - 1]));

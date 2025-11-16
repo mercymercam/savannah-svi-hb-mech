@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import * as echarts from 'echarts';
 import { UseDamageDataResult } from '@/hooks/useDamageData';
 
@@ -7,15 +7,20 @@ interface ChartProps {
   damageData: UseDamageDataResult;
 }
 
-export const Chart: React.FC<ChartProps> = ({ damageData }) => {
+export const Chart: React.FC<ChartProps> = memo(({ damageData }) => {
   const [showBarChart, setShowBarChart] = useState(false);
   const chartRef = React.useRef<HTMLDivElement>(null);
+  const chartInstanceRef = React.useRef<echarts.ECharts | null>(null);
   const { boxPlotData, categories, boxPlotColors, enableBoxPlot, consideringCrits, viewMode } = damageData;
 
   React.useEffect(() => {
     if (!chartRef.current) return;
 
-    const chart = echarts.init(chartRef.current);
+    // Reuse existing chart instance instead of recreating
+    if (!chartInstanceRef.current) {
+      chartInstanceRef.current = echarts.init(chartRef.current);
+    }
+    const chart = chartInstanceRef.current;
 
     if (showBarChart) {
       // Extract median values (3rd element in each boxplot data array)
@@ -216,9 +221,19 @@ export const Chart: React.FC<ChartProps> = ({ damageData }) => {
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      chart.dispose();
+      // Don't dispose the chart, we're reusing it
     };
   }, [boxPlotData, categories, boxPlotColors, showBarChart, consideringCrits, viewMode]);
+
+  // Cleanup on unmount
+  React.useEffect(() => {
+    return () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.dispose();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <div className="w-full bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-200 dark:border-gray-700">
@@ -256,4 +271,6 @@ export const Chart: React.FC<ChartProps> = ({ damageData }) => {
       </div>
     </div>
   );
-};
+});
+
+Chart.displayName = 'Chart';

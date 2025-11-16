@@ -1,6 +1,6 @@
 //TODO: Update to bring back boxplot for simulation
 
-import React, { useState } from 'react';
+import React, { useState, memo, useMemo } from 'react';
 import {
   ColumnDef,
   flexRender,
@@ -125,7 +125,7 @@ const columns: ColumnDef<DamageDataRow>[] = [
   },
 ];
 
-export const DamageTable: React.FC<DataTableProps> = ({ damageData }) => {
+export const DamageTable: React.FC<DataTableProps> = memo(({ damageData }) => {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'd4Count', desc: false },
   ]);
@@ -133,9 +133,12 @@ export const DamageTable: React.FC<DataTableProps> = ({ damageData }) => {
   // Get table data from prop
   const { rows: tableData, viewMode } = damageData;
 
+  // Memoize columns to prevent recreation on every render
+  const memoizedColumns = useMemo(() => columns, []);
+
   const table = useReactTable({
     data: tableData,
-    columns,
+    columns: memoizedColumns,
     state: {
       sorting,
     },
@@ -222,4 +225,6 @@ export const DamageTable: React.FC<DataTableProps> = ({ damageData }) => {
       </div>
     </div>
   );
-};
+});
+
+DamageTable.displayName = 'DamageTable';
